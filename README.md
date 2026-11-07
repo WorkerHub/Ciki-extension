@@ -103,6 +103,8 @@ grep -rInE "https?://[A-Za-z0-9.-]+" src public test scripts README.md \
 标签会一律落成「提示」——这是另一侧的行为，插件按正确标签生成，形态与 §5 完全一致）。
 
 图片规则：`<ri:attachment>` 按文件名对 `child/attachment` 清单，取 `_links.download` 的**原图**；
+拿到的 `Content-Type` 会先归一再交给 ciki（剥掉 `;charset=…`、`image/jpg` 归到 `image/jpeg`、
+`application/octet-stream` 时按附件扩展名兜底），因为 ciki 只认 `image/png|jpeg|gif|webp` 四种写法；
 抓不到或不是 ciki 收的格式（只收 png/jpg/gif/webp）就在正文原位留「未转存」占位（文件名 +
 原链接）并汇总进完成报告；非图片附件一律不转存，只保留原链接与文件名。
 
@@ -131,7 +133,9 @@ grep -rInE "https?://[A-Za-z0-9.-]+" src public test scripts README.md \
 
 - 字节用 base64 data URL 而不是 Blob：Blob 过不了 world / 消息边界。
 - 插件只抓**已配置 Confluence 实例**同源的地址；失败时不派 `captured`，标黄与「重试自动转存」
-  入口由 ciki 侧保留，失败原因写进插件弹窗。
+  入口由 ciki 侧保留，失败原因写进插件弹窗（只留最近一条，成功会被新的失败盖住）。
+- `hello` 里重复出现的同一张图走缓存，不重复打 Confluence；`capture` 是用户点「重试自动转存」
+  发起的，**必定重新抓一次**，不会被上一次的结果糊弄过去。
 - 事件由 MAIN world 的中继脚本收发（isolated world 读不到页面派发事件的 `detail`），
   见 `src/content/relay.ts`。
 
@@ -140,7 +144,8 @@ grep -rInE "https?://[A-Za-z0-9.-]+" src public test scripts README.md \
 ```bash
 pnpm typecheck        # tsc
 pnpm lint             # biome
-pnpm test             # 106 条：§5 断言移植 36、转换 27、队列 9、设置 11、事件桥 9、入口/探测 10、端到端 4
+pnpm test             # 130 条：§5 断言移植 36、转换 27、队列 9、设置 11、事件桥 10、入口/探测 10、
+                      # ciki 地址补全 6、图片 MIME 归一 7、一次性上下文/补抓状态 6、字节出口 4、端到端 4
 pnpm fixture          # 起本地夹具：假 Confluence :8811 + 假 ciki :8812（令牌 fixture-token）
 pnpm build            # dist/
 ```

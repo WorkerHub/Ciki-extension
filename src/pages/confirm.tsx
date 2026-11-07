@@ -27,8 +27,7 @@ import {
 } from "@/flow/import"
 import { reportLines } from "@/flow/report"
 import { ImportError, toImportError } from "@/shared/errors"
-import { takeRun } from "@/shared/run-store"
-import { loadSettings } from "@/shared/settings"
+import { clearRun, getRun } from "@/shared/run-store"
 
 const ROOT_VALUE = "__root__"
 
@@ -50,7 +49,6 @@ const CONFLICT_LABELS: Record<string, string> = {
 export function Confirm() {
   const [phase, setPhase] = useState<Phase>("loading")
   const [confirm, setConfirm] = useState<ConfirmInput | null>(null)
-  const [settingsCiki, setSettingsCiki] = useState("")
   const [title, setTitle] = useState("")
   const [parentId, setParentId] = useState<string | null>(null)
   const [conflict, setConflict] = useState("create_copy")
@@ -59,6 +57,7 @@ export function Confirm() {
   const [result, setResult] = useState<ImportResult | null>(null)
   const [failure, setFailure] = useState<FailureView | null>(null)
   const contextRef = useRef<ImportContext | null>(null)
+  const runIdRef = useRef("")
   const checkTimer = useRef<number | null>(null)
 
   useEffect(() => {
@@ -66,19 +65,18 @@ export function Confirm() {
       try {
         const runId =
           new URLSearchParams(window.location.search).get("run") || ""
-        const job = await takeRun(runId)
+        runIdRef.current = runId
+        const job = await getRun(runId)
         if (!job) {
           throw new ImportError(
             "NOT_FOUND",
-            "这一批的上下文已经丢了（确认小窗是一次性的，关掉就失效）",
+            "这一批的上下文已经丢了（浏览器重启过，或这次搬运已经完成）",
             {
-              title: "确认小窗已失效",
-              hint: "回 Confluence 页再点一次「搬到 ciki」。"
+              title: "这次搬运已经结束",
+              hint: "回 Confluence 页再点一次「搬到 ciki」重新来一批。"
             }
           )
         }
-        const settings = await loadSettings()
-        setSettingsCiki(settings.cikiUrl)
         const prepared = await prepareImport(job)
         contextRef.current = prepared.context
         setConfirm(prepared.confirm)
@@ -144,6 +142,7 @@ export function Confirm() {
           ])
         }
       )
+      await clearRun(runIdRef.current)
       setResult(outcome)
       setPhase("done")
     } catch (error) {
@@ -152,9 +151,8 @@ export function Confirm() {
     }
   }
 
-  const pageUrl = result
-    ? result.url || `${settingsCiki.replace(/\/+$/, "")}/p/${result.pageId}`
-    : ""
+  // executeImport 已经把根相对路径补成了绝对地址（见 cikiPageUrl）
+  const pageUrl = result ? result.url : ""
 
   return (
     <div className="flex h-screen flex-col">

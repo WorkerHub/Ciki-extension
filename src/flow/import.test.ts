@@ -177,6 +177,9 @@ describe("整页搬运动编（夹具 HTTP，不 mock 接口）", () => {
     )
 
     expect(result.pageId).toMatch(/[0-9a-f-]{36}/)
+    // 接口回的是根相对路径 /p/<id>：报告与「在 ciki 打开」都要补成绝对地址
+    expect(result.url).toBe(`${CIKI}/p/${result.pageId}`)
+    expect(result.report.pageUrl).toBe(`${CIKI}/p/${result.pageId}`)
     expect(result.report.images.uploaded).toBe(1)
     expect(result.report.images.failed).toHaveLength(0)
     expect(result.report.images.external).toBe(1)

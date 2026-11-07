@@ -290,9 +290,10 @@ const ciki = createServer(async (req, res) => {
     console.log(
       `[fixture] import/pages conflict=${body.conflict} bytes=${body.contentJson.length} pageId=${id}`
     )
+    // 真实后端回的是根相对路径（/p/<id>），夹具也照这个口径，别把前端的补全掩盖掉
     return sendJson(res, existing && body.conflict === "update" ? 200 : 201, {
       pageId: id,
-      url: `http://127.0.0.1:${CIKI_PORT}/p/${id}`
+      url: `/p/${id}`
     })
   }
 

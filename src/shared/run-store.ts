@@ -16,8 +16,7 @@ export interface PreparedRun {
 
 const RUN_PREFIX = "run:"
 const QUEUE_KEY = "confluence-queue"
-const BRIDGE_ERROR_KEY = "bridge-last-error"
-const BRIDGE_OK_KEY = "bridge-last-ok"
+const BRIDGE_KEY = "bridge-last-status"
 
 function area(): chrome.storage.StorageArea {
   // 旧版 Chrome 没有 storage.session：退回 local（只影响证据留存，不影响功能）
@@ -28,12 +27,18 @@ export async function putRun(run: PreparedRun): Promise<void> {
   await area().set({ [`${RUN_PREFIX}${run.runId}`]: run })
 }
 
-export async function takeRun(runId: string): Promise<PreparedRun | null> {
+/** 读但不删：小窗重载、或「重新打开」重试时，还要能再拿到同一份上下文。 */
+export async function getRun(runId: string): Promise<PreparedRun | null> {
+  if (!runId) return null
   const key = `${RUN_PREFIX}${runId}`
   const stored = await area().get(key)
-  const run = stored[key] as PreparedRun | undefined
-  if (run) await area().remove(key)
-  return run ?? null
+  return (stored[key] as PreparedRun | undefined) ?? null
+}
+
+/** 搬运成功后才清掉这一批，避免同一批被重复触发；关窗口不清，留给重试。 */
+export async function clearRun(runId: string): Promise<void> {
+  if (!runId) return
+  await area().remove(`${RUN_PREFIX}${runId}`)
 }
 
 export async function loadQueueSnapshot(): Promise<StoredQueue | null> {
@@ -52,19 +57,17 @@ export interface BridgeStatus {
   src?: string
 }
 
+/** 只留最近一条：成功与失败共用一个键，新的状态一定盖住旧的。 */
 export async function setBridgeStatus(status: BridgeStatus): Promise<void> {
-  await area().set({
-    [status.ok ? BRIDGE_OK_KEY : BRIDGE_ERROR_KEY]: status
-  })
+  await area().set({ [BRIDGE_KEY]: status })
 }
 
 export async function loadBridgeStatus(): Promise<{
   error: BridgeStatus | null
   ok: BridgeStatus | null
 }> {
-  const stored = await area().get([BRIDGE_ERROR_KEY, BRIDGE_OK_KEY])
-  return {
-    error: (stored[BRIDGE_ERROR_KEY] as BridgeStatus | undefined) ?? null,
-    ok: (stored[BRIDGE_OK_KEY] as BridgeStatus | undefined) ?? null
-  }
+  const stored = await area().get(BRIDGE_KEY)
+  const latest = stored[BRIDGE_KEY] as BridgeStatus | undefined
+  if (!latest) return { error: null, ok: null }
+  return latest.ok ? { error: null, ok: latest } : { error: latest, ok: null }
 }

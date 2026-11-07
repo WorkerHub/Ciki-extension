@@ -176,5 +176,24 @@ export class ImportApi {
   }
 }
 
+/**
+ * 把导入接口回的 url 变成可点的绝对地址。
+ *
+ * 真实后端回的是根相对路径 `/p/<pageId>`：直接塞进 `<a href>` 会被浏览器当成本页
+ * （扩展页）的相对路径，点开就是 chrome-extension://…/p/… 的 404。
+ */
+export function cikiPageUrl(
+  cikiUrl: string,
+  url?: string,
+  pageId?: string
+): string {
+  const target = (url ?? "").trim() || (pageId ? `/p/${pageId}` : "")
+  if (!target) return ""
+  if (/^https?:\/\//i.test(target)) return target
+  const base = cikiUrl.trim().replace(/\/+$/, "")
+  if (!base) return target
+  return `${base}${target.startsWith("/") ? "" : "/"}${target}`
+}
+
 /** data URL ↔ Blob 的转换放在 shared/bytes，这里只做转出，方便调用方一次 import。 */
 export { arrayBufferToDataUrl, dataUrlToBlob } from "@/shared/bytes"

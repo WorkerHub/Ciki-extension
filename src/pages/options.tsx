@@ -54,10 +54,14 @@ export function Options() {
       setStatus({ tone: "error", text: "ciki 地址要是完整的 http(s) 地址" })
       return null
     }
-    const origins = [
-      permissionPattern(confluence),
-      permissionPattern(ciki)
-    ].filter((value): value is string => Boolean(value))
+    // 两个地址同源时（本地测试、同域反代）pattern 会重复，Chrome 对重复 origin 会报错。
+    const origins = Array.from(
+      new Set(
+        [permissionPattern(confluence), permissionPattern(ciki)].filter(
+          (value): value is string => Boolean(value)
+        )
+      )
+    )
     let granted = false
     try {
       granted = await chrome.permissions.request({ origins })
@@ -106,7 +110,9 @@ export function Options() {
       if (!confluence.ok) {
         setStatus({
           tone: "error",
-          text: `Confluence：${confluence.message}（${confluence.hint}）`
+          text: `Confluence：${confluence.message}${
+            confluence.hint ? `（${confluence.hint}）` : ""
+          }`
         })
         return
       }

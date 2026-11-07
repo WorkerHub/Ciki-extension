@@ -3,6 +3,7 @@
  * 这里只负责拼 URL、解析 JSON、把附件清单整理成可匹配的形状。
  */
 import { ImportError } from "@/shared/errors"
+import { isAcceptedImageType, normalizeImageType } from "@/shared/image-type"
 import type { Reply } from "@/shared/messages"
 import { sendMessage } from "@/shared/messages"
 
@@ -23,7 +24,6 @@ export interface Attachment {
   uploadable: boolean
 }
 
-const UPLOADABLE_EXT = /\.(png|jpe?g|gif|webp)$/i
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp|svg)$/i
 const MAX_ATTACHMENT_PAGES = 10
 
@@ -127,6 +127,8 @@ function toAttachment(raw: unknown, apiBase: string): Attachment | null {
   const links = asRecord(item._links)
   const download = asString(links.download)
   const mediaType = asString(metadata.mediaType)
+  // 实例常回 image/jpg 或带参数的类型，按 ciki 的白名单归一后再判能不能转存
+  const normalizedType = normalizeImageType(mediaType, filename)
   const looksImage = mediaType.startsWith("image/") || IMAGE_EXT.test(filename)
   return {
     filename,
@@ -135,12 +137,7 @@ function toAttachment(raw: unknown, apiBase: string): Attachment | null {
       ? resolveLink(download, apiBase, asString(links.base))
       : "",
     isImage: looksImage,
-    uploadable:
-      mediaType === "image/png" ||
-      mediaType === "image/jpeg" ||
-      mediaType === "image/gif" ||
-      mediaType === "image/webp" ||
-      (!mediaType && UPLOADABLE_EXT.test(filename))
+    uploadable: isAcceptedImageType(normalizedType)
   }
 }
 

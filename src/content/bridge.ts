@@ -57,10 +57,13 @@ export function createBridge(deps: BridgeDeps): Bridge {
     deps.postToPage(BRIDGE_EVENTS.pluginHello, null)
   }
 
-  const captureOne = async (raw: string) => {
+  const captureOne = async (raw: string, refresh = false) => {
     if (stopped) return
     const src = raw.trim()
     if (!src) return
+    // capture 是用户点「重试自动转存」发起的：必须真的再打一次 Confluence，
+    // 不能被上一次（可能已经失败或过期的）结果糊弄过去。
+    if (refresh) captured.delete(src)
     const cached = captured.get(src)
     if (cached) {
       deps.postToPage(BRIDGE_EVENTS.captured, { src, ...cached })
@@ -98,7 +101,7 @@ export function createBridge(deps: BridgeDeps): Bridge {
 
   const handleCapture = async (src: unknown) => {
     if (typeof src !== "string") return
-    await captureOne(src)
+    await captureOne(src, true)
   }
 
   const handleMessage = async (data: unknown) => {

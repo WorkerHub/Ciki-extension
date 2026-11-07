@@ -13,6 +13,7 @@ import {
 import { installImageRelay, RELAY_CONFIG } from "@/content/relay"
 import { arrayBufferToDataUrl } from "@/shared/bytes"
 import { ImportError } from "@/shared/errors"
+import { baseMimeType, normalizeImageType } from "@/shared/image-type"
 import type { FetchedBytes, PageProbe, RequestMessage } from "@/shared/messages"
 import { fail, ok } from "@/shared/messages"
 import {
@@ -92,7 +93,8 @@ async function fetchJson(url: string): Promise<{ json: unknown }> {
   }
 }
 
-async function fetchBytes(url: string): Promise<FetchedBytes> {
+/** 导出给测试：附件字节下载 + MIME 归一（ciki 只认白名单里的四种）。 */
+export async function fetchBytes(url: string): Promise<FetchedBytes> {
   await assertAllowed(url)
   const instance = await getQueue()
   const response = await instance.fetch(url)
@@ -100,11 +102,16 @@ async function fetchBytes(url: string): Promise<FetchedBytes> {
   if (!buffer.byteLength) {
     throw new ImportError("HTTP", "附件下载回来是空的（可能是权限或附件已删）")
   }
-  const contentType = response.headers.get("content-type") || ""
+  const filename = filenameFromUrl(url)
+  const rawType = response.headers.get("content-type") || ""
+  // 归一成 ciki 认的 MIME（去 ;charset=、image/jpg→image/jpeg、按扩展名兜底）：
+  // 带参数的 data URL 与 contentType 会被 ciki 的校验直接判非法。
+  const contentType =
+    normalizeImageType(rawType, filename) || baseMimeType(rawType)
   return {
     dataUrl: arrayBufferToDataUrl(buffer, contentType),
     contentType,
-    filename: filenameFromUrl(url),
+    filename,
     byteLength: buffer.byteLength
   }
 }

@@ -94,11 +94,19 @@ describe("补抓事件桥（插件侧）", () => {
     expect(failures[0]?.message).toBe("Confluence 登录已失效")
   })
 
-  it("同一张图被重复索取时走缓存，不再打 Confluence", async () => {
+  it("hello 里同一张图重复出现时走缓存，不重复打 Confluence", async () => {
     const { bridge, posts, calls } = harness()
-    await bridge.handleCapture(ALLOWED)
-    await bridge.handleCapture(ALLOWED)
+    await bridge.handleHello([ALLOWED])
+    await bridge.handleHello([ALLOWED])
     expect(calls).toHaveLength(1)
+    expect(posts.filter((post) => post.kind === "captured")).toHaveLength(2)
+  })
+
+  it("capture 是用户手动重试：缓存里有也要重新抓一次", async () => {
+    const { bridge, posts, calls } = harness()
+    await bridge.handleHello([ALLOWED])
+    await bridge.handleCapture(ALLOWED)
+    expect(calls).toHaveLength(2)
     expect(posts.filter((post) => post.kind === "captured")).toHaveLength(2)
   })
 

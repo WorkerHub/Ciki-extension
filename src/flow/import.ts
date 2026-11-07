@@ -10,7 +10,12 @@ import {
   type QueueSnapshot,
   summarizeQueue
 } from "@/background/confluence-queue"
-import { dataUrlToBlob, ImportApi, type ImportParent } from "@/ciki/api"
+import {
+  cikiPageUrl,
+  dataUrlToBlob,
+  ImportApi,
+  type ImportParent
+} from "@/ciki/api"
 import { indexAttachments, matchAttachment } from "@/confluence/attachments"
 import type { Attachment, ConfluenceContent } from "@/confluence/client"
 import {
@@ -34,6 +39,7 @@ import {
   ImportError,
   toImportError
 } from "@/shared/errors"
+import { isAcceptedImageType, normalizeImageType } from "@/shared/image-type"
 import type { PageProbe } from "@/shared/messages"
 import { sendMessage } from "@/shared/messages"
 import {
@@ -263,7 +269,17 @@ async function uploadOne(
   try {
     const downloaded = await downloadImage(attachment.downloadUrl)
     const { blob } = dataUrlToBlob(downloaded.dataUrl)
-    const uploaded = await context.api.upload(blob, attachment.filename)
+    // 反代有时回 application/octet-stream：按附件元数据/文件名补上 ciki 认的类型，
+    // 否则上传被拒、图白抓一场。
+    const contentType = isAcceptedImageType(blob.type)
+      ? blob.type
+      : normalizeImageType(attachment.mediaType, attachment.filename) ||
+        blob.type
+    const uploadBlob =
+      contentType && contentType !== blob.type
+        ? new Blob([blob], { type: contentType })
+        : blob
+    const uploaded = await context.api.upload(uploadBlob, attachment.filename)
     if (!isHostedImageSrc(uploaded.url)) {
       return {
         status: "failed",
@@ -368,6 +384,12 @@ export async function executeImport(
     conflict: decision.conflict
   })
 
+  const pageUrl = cikiPageUrl(
+    context.settings.cikiUrl,
+    created.url,
+    created.pageId
+  )
+
   const parentTitle =
     context.parents.find((item) => item.id === decision.parentId)?.title ?? ""
   await saveSettings({
@@ -402,7 +424,7 @@ export async function executeImport(
     title: decision.title,
     sourceUrl: context.content.selfUrl,
     pageId: created.pageId,
-    pageUrl: created.url || "",
+    pageUrl,
     conflict: decision.conflict,
     images: {
       total: context.prepared.refs.length,
@@ -417,5 +439,5 @@ export async function executeImport(
     queue
   }
 
-  return { pageId: created.pageId, url: created.url || "", report }
+  return { pageId: created.pageId, url: pageUrl, report }
 }
