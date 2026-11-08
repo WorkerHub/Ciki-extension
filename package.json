@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "在源文档页一键剪藏到 Ciki 的 Chrome MV3 插件（开发者模式加载）",
+  "description": "在源文档页一键剪藏到 Ciki 的 Chrome MV3 插件",
   "scripts": {
     "dev": "vite",
     "build": "vite build && vite build --config vite.content.config.ts",
