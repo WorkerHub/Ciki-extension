@@ -15,6 +15,9 @@ Chinese; the original labels are included in parentheses below.
 
 - **Full-page clipping**: title, body, code blocks, tables, task lists, callout panels and original
   attachment images are imported together.
+- **Colors come along**: text colors, highlights and table cell backgrounds are imported too. Ciki
+  only accepts `#rrggbb`-style values, so named and semi-transparent colors fall back to plain
+  text.
 - **Choose a space**: pick the destination space in the confirmation window; the parent page list
   follows the selected space. The last used space is preselected, and the completion report states
   where the page landed.

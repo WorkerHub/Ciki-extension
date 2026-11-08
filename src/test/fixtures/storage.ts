@@ -100,3 +100,28 @@ export const IMAGE_STORAGE = `
 
 /** 一个开关都没有的极简页。 */
 export const PLAIN_STORAGE = `<p>只有一段话。</p>`
+
+/**
+ * 颜色夹具（storage format 形态）：Confluence 把三种颜色都写成内联样式，
+ * 混着 rgb()/hex/大写/!important 与归一不出来的 var()、font-size、border。
+ * 期望：三种颜色落到契约载具上，其余声明照旧剥除。
+ */
+export const COLOR_STORAGE = `
+<h2>颜色示例</h2>
+<p>普通文字，<span style="color: rgb(222, 53, 11);">红色警告</span>，<span style="color: #1F845A; font-weight: 600;">绿色加粗</span>。</p>
+<p><span style="background-color: rgb(255, 229, 143);">黄色高亮</span>与<span style="background-color: #f00;">短写高亮</span>。</p>
+<p><font color="#0052cc">老式 font 颜色</font>，<span style="color: var(--accent); font-size: 18px;">没法归一的行内颜色</span>。</p>
+<p style="color: rgb(0, 82, 204);">段落级颜色</p>
+<table>
+  <tbody>
+    <tr>
+      <th style="background-color: #f4f5f7; border: 1px solid #dfe1e6;">环境</th>
+      <th style="background-color: rgb(222, 235, 255);">值</th>
+    </tr>
+    <tr>
+      <td style="background-color: #fffae6!important;">生产</td>
+      <td style="color: #de350b; background-color: #ffebe6;">3000ms</td>
+    </tr>
+  </tbody>
+</table>
+`

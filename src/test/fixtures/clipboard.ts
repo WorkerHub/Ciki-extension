@@ -89,3 +89,16 @@ export const SAMPLE_CONFLUENCE_HTML = `
 <p>架构图：</p>
 <p><span class="confluence-embedded-file-wrapper"><img class="confluence-embedded-image" src="https://confluence.example.com/download/attachments/12345/arch.png" alt="架构图" width="640"></span></p>
 </div>`
+
+// 颜色批次（与 Ciki 主单同一份样本）：文字颜色、高亮、单元格底色，
+// 混着归一得出来的（rgb/hex/老式 font）与归一不出来的（var/font-size/border）。
+export const SAMPLE_COLOR_HTML = `
+<div class="wiki-content">
+<p>普通文字，<span style="color: rgb(222, 53, 11);">红色警告</span>，<span style="color: #1f845a; font-weight: 600;">绿色加粗</span>。</p>
+<p><span style="background-color: rgb(255, 229, 143);">黄色高亮</span>与<mark>裸高亮</mark>。</p>
+<p><font color="#0052cc">老式 font 颜色</font>，<span style="color: var(--accent); font-size: 18px;">没法归一的行内颜色</span>。</p>
+<table class="confluenceTable"><tbody>
+<tr><th class="confluenceTh" style="background-color: #f4f5f7; border: 1px solid #dfe1e6;">环境</th><th class="confluenceTh" style="background-color: rgb(222, 235, 255);">值</th></tr>
+<tr><td class="confluenceTd" style="background-color: #fffae6!important;">生产</td><td class="confluenceTd" style="color: #de350b; background-color: #ffebe6;">3000ms</td></tr>
+</tbody></table>
+</div>`

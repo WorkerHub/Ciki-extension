@@ -7,11 +7,14 @@
  * inline-task-list ul、附件 img…），剩下的结构归一与图片白名单全交给 §5 那段，
  * 两侧口径天然一致，也就不用再维护第二套清洗规则。
  *
- * 两个必须自己处理的地方：
+ * 三个必须自己处理的地方：
  * 1. CDATA —— HTML 解析器会把 `<![CDATA[…]]>` 当注释、遇 `>` 就截断，含 `>` 的
  *    代码会碎掉。所以解析前先把 CDATA 抽成占位元素，代码宏按原文渲染。
  * 2. HTML 宏 —— 面板、expand、status、drawio、ac:link 这些没有对应的剪贴板形态，
  *    在这里就地翻译。
+ * 3. 内联颜色 —— storage 里文字颜色/高亮/单元格底色是 `style="color: …"` 这种内联样式，
+ *    而属性白名单默认只留结构属性。颜色相关标签的 `style` 要原样带到剪贴板形态，
+ *    清洗管线的颜色步骤才能把它归一成契约载具；其余内联样式在清洗时一并剥掉。
  */
 import { safeExternalUrl } from "./media"
 
@@ -137,6 +140,8 @@ const KEEP_TAGS = new Set([
   "hr",
   "a",
   "span",
+  "mark",
+  "font",
   "div",
   "section",
   "article",
@@ -150,8 +155,50 @@ const KEEP_ATTRS: Record<string, string[]> = {
   a: ["href", "title"],
   td: ["colspan", "rowspan"],
   th: ["colspan", "rowspan"],
-  col: ["style", "width"]
+  col: ["style", "width"],
+  // 老式 <font color="#de350b">，清洗管线把它归一成 span[data-text-color]
+  font: ["color"]
 }
+
+/**
+ * 可能带颜色内联样式的标签：文字颜色写在 `color`，高亮/单元格底色写在
+ * `background-color`，两者都在这里原样带过；清洗管线的颜色步骤只认这两条声明，
+ * 其余声明与整条 style 一起剥除，白名单不因此放宽。
+ */
+const STYLE_TAGS = new Set([
+  "span",
+  "mark",
+  "font",
+  "strong",
+  "b",
+  "em",
+  "i",
+  "u",
+  "s",
+  "del",
+  "ins",
+  "sub",
+  "sup",
+  "code",
+  "a",
+  "p",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "li",
+  "div",
+  "section",
+  "article",
+  "figure",
+  "figcaption",
+  "small",
+  "time",
+  "td",
+  "th"
+])
 
 /** 面板宏的标签 —— 与 §5 清洗管线同一个形态（引用块 + 加粗标签行）。 */
 const PANEL_LABELS: Record<string, string> = {
@@ -361,6 +408,10 @@ function copyAttributes(source: Element, target: Element): void {
       if (!/^\d+$/.test(value.trim())) continue
     }
     target.setAttribute(name, value)
+  }
+  if (STYLE_TAGS.has(tag)) {
+    const style = source.getAttribute("style")
+    if (style) target.setAttribute("style", style)
   }
 }
 

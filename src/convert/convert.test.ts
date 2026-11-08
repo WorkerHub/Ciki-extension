@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  COLOR_STORAGE,
   IMAGE_STORAGE,
   PLAIN_STORAGE,
   SAMPLE_STORAGE
@@ -291,5 +292,133 @@ describe("边角", () => {
     expect(paragraphs.every((item) => (item.content ?? []).length > 0)).toBe(
       true
     )
+  })
+})
+
+/**
+ * 颜色批次（与 Ciki 主单 #23 冻结的契约同一口径）：
+ * 文字颜色 → `textStyle` mark 的 `color`；高亮 → `highlight` mark 的 `color`；
+ * 单元格底色 → `tableCell`/`tableHeader` 的 `backgroundColor`；值一律 `#rrggbb`。
+ */
+describe("颜色：storage 内联样式 → 契约 JSON", () => {
+  const { doc, cleaned } = convert(COLOR_STORAGE)
+
+  /** 取某段文字的 marks（找不到返回空数组）。 */
+  function marksOfText(node: unknown, text: string): any[] {
+    const found: any[] = []
+    const visit = (current: any) => {
+      if (!current || typeof current !== "object") return
+      if (current.type === "text" && current.text === text) {
+        found.push(current.marks ?? [])
+      }
+      for (const child of current.content ?? []) visit(child)
+    }
+    visit(node)
+    return found
+  }
+
+  it("文字颜色：rgb() 归一成 #rrggbb 的 textStyle mark", () => {
+    expect(marksOfText(doc, "红色警告")[0]).toEqual([
+      { type: "textStyle", attrs: { color: "#de350b" } }
+    ])
+  })
+
+  it("文字颜色：大写 hex 归一成小写", () => {
+    expect(marksOfText(doc, "绿色加粗")[0]).toEqual([
+      { type: "textStyle", attrs: { color: "#1f845a" } }
+    ])
+  })
+
+  it("文字颜色：老式 <font color> 与段落级颜色都转成 textStyle", () => {
+    expect(marksOfText(doc, "老式 font 颜色")[0]).toEqual([
+      { type: "textStyle", attrs: { color: "#0052cc" } }
+    ])
+    expect(marksOfText(doc, "段落级颜色")[0]).toEqual([
+      { type: "textStyle", attrs: { color: "#0052cc" } }
+    ])
+  })
+
+  it("高亮：span 的 background-color 变成带色 highlight mark（含短写 hex）", () => {
+    expect(marksOfText(doc, "黄色高亮")[0]).toEqual([
+      { type: "highlight", attrs: { color: "#ffe58f" } }
+    ])
+    expect(marksOfText(doc, "短写高亮")[0]).toEqual([
+      { type: "highlight", attrs: { color: "#ff0000" } }
+    ])
+  })
+
+  it("归一不出来的颜色不产出 mark，文字照旧保留", () => {
+    // 相邻无标记的文字会被 ProseMirror 并成一个 text 节点，按片段找
+    const nodes: any[] = []
+    const visit = (current: any) => {
+      if (!current || typeof current !== "object") return
+      if (
+        current.type === "text" &&
+        String(current.text).includes("没法归一的行内颜色")
+      ) {
+        nodes.push(current)
+      }
+      for (const child of current.content ?? []) visit(child)
+    }
+    visit(doc)
+    expect(nodes.map((node) => node.marks ?? [])).toEqual([[]])
+  })
+
+  it("单元格底色：表头/单元格的 background-color 落到 backgroundColor", () => {
+    const table = nodesOfType(doc, "table")[0]
+    expect(
+      nodesOfType(table, "tableHeader").map(
+        (cell) => cell.attrs.backgroundColor
+      )
+    ).toEqual(["#f4f5f7", "#deebff"])
+    expect(
+      nodesOfType(table, "tableCell").map((cell) => cell.attrs.backgroundColor)
+    ).toEqual(["#fffae6", "#ffebe6"])
+  })
+
+  it("单元格底色：归一不出来的写法不落到 JSON（只留文字）", () => {
+    const plain = convert(
+      '<table><tbody><tr><td style="background-color: yellow;">格</td></tr></tbody></table>'
+    )
+    const cell = nodesOfType(plain.doc, "tableCell")[0]
+    expect(cell.attrs.backgroundColor).toBeNull()
+    expect(textOfNode(cell)).toBe("格")
+  })
+
+  it("同一个单元格的文字颜色与底色同时保留", () => {
+    expect(marksOfText(doc, "3000ms")[0]).toEqual([
+      { type: "textStyle", attrs: { color: "#de350b" } }
+    ])
+    const cell = nodesOfType(doc, "tableCell").find(
+      (item) => textOfNode(item) === "3000ms"
+    )
+    expect(cell?.attrs.backgroundColor).toBe("#ffebe6")
+  })
+
+  it("除颜色外的内联样式照旧剥干净（不进 HTML，也不进 JSON）", () => {
+    expect(cleaned).not.toMatch(/\sstyle=/)
+    const json = JSON.stringify(doc)
+    expect(json).not.toContain("font-size")
+    expect(json).not.toContain("fontWeight")
+    expect(json).not.toContain("border")
+    expect(json).not.toContain("var(--accent)")
+  })
+
+  it("颜色属性只有契约里的三个名字", () => {
+    const markTypes = new Set<string>()
+    const attrKeys = new Set<string>()
+    const visit = (node: any) => {
+      if (!node || typeof node !== "object") return
+      for (const mark of node.marks ?? []) {
+        markTypes.add(mark.type)
+        for (const key of Object.keys(mark.attrs ?? {})) {
+          attrKeys.add(`${mark.type}.${key}`)
+        }
+      }
+      for (const child of node.content ?? []) visit(child)
+    }
+    visit(doc)
+    expect([...markTypes].sort()).toEqual(["highlight", "textStyle"])
+    expect([...attrKeys].sort()).toEqual(["highlight.color", "textStyle.color"])
   })
 })
