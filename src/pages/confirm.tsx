@@ -129,7 +129,10 @@ export function Confirm() {
     []
   )
 
-  /** 切空间：父级树重拉、父级落回记住的那一项；失败就退回原空间，不动已选好的父级。 */
+  /**
+   * 切空间：父级树重拉、父级落回记住的那一项；失败就退回原空间，不动已选好的父级，
+   * 并在表单里给出“留在当前空间继续”的明确出口（不能把用户卡在禁用状态）。
+   */
   const changeSpace = async (next: string) => {
     const context = contextRef.current
     if (!context || switching || next === spaceId) return
@@ -254,12 +257,21 @@ export function Confirm() {
                     <Alert variant="destructive">
                       <AlertTitle>{spaceFailure.title}</AlertTitle>
                       <AlertDescription>
-                        <div>{spaceFailure.message}</div>
+                        <div>切换到这个空间没成功，已退回原来的空间。</div>
+                        <div className="mt-1">{spaceFailure.message}</div>
                         {spaceFailure.hint ? (
                           <div className="mt-1 text-xs">
                             {spaceFailure.hint}
                           </div>
                         ) : null}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mt-2"
+                          onClick={() => setSpaceFailure(null)}
+                        >
+                          留在当前空间继续剪藏
+                        </Button>
                       </AlertDescription>
                     </Alert>
                   ) : null}

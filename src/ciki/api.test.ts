@@ -135,6 +135,26 @@ describe("导入接口的空间参数（契约：space_id）", () => {
     })
   })
 
+  it("409 SPACE_MISMATCH 归到空间不一致错误", async () => {
+    stubFetch(() =>
+      jsonResponse({ error: "Space mismatch", code: "SPACE_MISMATCH" }, 409)
+    )
+    await expect(
+      new ImportApi(CIKI, "t").createPage({
+        title: "标题",
+        spaceId: "space-dev",
+        parentId: "p-root",
+        contentJson: "{}",
+        conflict: "create_copy"
+      })
+    ).rejects.toMatchObject({
+      code: "SPACE_MISMATCH",
+      status: 409,
+      title: "父页不在所选空间",
+      hint: "关掉弹窗重新剪藏一次，让空间与父级重新读一遍。"
+    })
+  })
+
   it("409 DEFAULT_SPACE_MISSING 提示先升级数据库", async () => {
     stubFetch(() =>
       jsonResponse(
