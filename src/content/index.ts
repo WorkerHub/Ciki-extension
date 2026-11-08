@@ -19,7 +19,7 @@ import { createBridge } from "./bridge"
 import { mountConfluenceButton } from "./confluence"
 import { probeConfluencePage } from "./probe"
 
-const GUARD = "__cikiExtensionMounted"
+const GUARD = "__cikiHelperMounted"
 
 /** 连点入口时只开一个小窗：置位到消息回来为止。 */
 let starting = false
