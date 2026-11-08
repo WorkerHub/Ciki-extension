@@ -72,7 +72,7 @@ describe("补抓事件桥（插件侧）", () => {
     })
     expect(calls).toHaveLength(0)
     expect(posts).toHaveLength(0)
-    expect(failures[0]?.message).toContain("不在已配置的 Confluence 实例")
+    expect(failures[0]?.message).toContain("不在已配置的源站")
   })
 
   it("抓失败不回 captured（标黄与重试入口留给 ciki 侧）", async () => {
@@ -80,7 +80,7 @@ describe("补抓事件桥（插件侧）", () => {
       fetchBytes: async () => ({
         ok: false,
         code: "LOGIN_REQUIRED",
-        message: "Confluence 登录已失效",
+        message: "源站登录已失效",
         hint: "",
         stop: true
       })
@@ -91,7 +91,7 @@ describe("补抓事件桥（插件侧）", () => {
       detail: { src: ALLOWED }
     })
     expect(posts).toHaveLength(0)
-    expect(failures[0]?.message).toBe("Confluence 登录已失效")
+    expect(failures[0]?.message).toBe("源站登录已失效")
   })
 
   it("hello 里同一张图重复出现时走缓存，不重复打 Confluence", async () => {

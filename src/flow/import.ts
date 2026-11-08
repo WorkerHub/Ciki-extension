@@ -111,7 +111,7 @@ function ensureConfigured(settings: Settings): void {
   if (!isConfigured(settings)) {
     throw new ImportError(
       "UNEXPECTED",
-      "还没配置完整：实例地址、ciki 地址、导入令牌都要先在设置里填好",
+      "还没配置完整：源站地址、ciki 地址、导入令牌都要先在设置里填好",
       { hint: "点插件图标 →「设置」，三项填完并授权域名。" }
     )
   }
@@ -177,13 +177,9 @@ export async function prepareImport(
   const settings = await loadSettings()
   ensureConfigured(settings)
   if (originOf(settings.confluenceUrl) !== originOf(job.probe.pageUrl)) {
-    throw new ImportError(
-      "UNEXPECTED",
-      "当前页不属于设置里填的 Confluence 实例",
-      {
-        hint: `请在设置里把实例地址改成 ${originOf(job.probe.pageUrl)}，或回该实例的页面再搬。`
-      }
-    )
+    throw new ImportError("UNEXPECTED", "当前页不属于设置里填的源站", {
+      hint: `请在设置里把源站地址改成 ${originOf(job.probe.pageUrl)}，或回该站点的页面再剪藏。`
+    })
   }
 
   const { base, content } = await resolveBase(

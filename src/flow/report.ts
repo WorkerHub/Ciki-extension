@@ -52,7 +52,7 @@ export function reportLines(report: ImportReport): string[] {
   }
   for (const warning of report.warnings) lines.push(`注意：${warning}`)
   lines.push(
-    `对 Confluence 的请求 ${report.queue.count} 次，最短间隔 ${
+    `对源站的请求 ${report.queue.count} 次，最短间隔 ${
       report.queue.minGapMs === null ? "—" : `${report.queue.minGapMs}ms`
     }（串行，固定 1000ms）`
   )

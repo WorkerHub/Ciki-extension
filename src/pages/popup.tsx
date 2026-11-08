@@ -121,9 +121,9 @@ export function Popup() {
     <div className="w-[360px] p-3">
       <div className="flex items-center justify-between">
         <div>
-          <div className="text-sm font-semibold">ciki 搬运助手</div>
+          <div className="text-sm font-semibold">Ciki助手</div>
           <div className="text-xs text-muted-foreground">
-            逐页手动搬运，对 Confluence 串行请求
+            逐页手动剪藏，对源站串行请求
           </div>
         </div>
         <Button
@@ -141,7 +141,7 @@ export function Popup() {
       <div className="space-y-2">
         <Row
           ok={Boolean(settings?.confluenceUrl)}
-          label="Confluence 实例"
+          label="源站"
           detail={settings?.confluenceUrl || "还没填"}
         />
         <Row
@@ -164,14 +164,14 @@ export function Popup() {
           label="当前标签页"
           detail={
             onConfluencePage
-              ? "这是 Confluence 页，可以搬"
-              : "不是已配置的 Confluence 页"
+              ? "这是源站的文档页，可以剪藏"
+              : "不是已配置的源站页面"
           }
         />
         <Row
           ok={Boolean(settings?.defaultParentTitle)}
           label="默认父级"
-          detail={settings?.defaultParentTitle || "上次搬运时记住"}
+          detail={settings?.defaultParentTitle || "上次剪藏时记住"}
         />
       </div>
 
@@ -198,7 +198,7 @@ export function Popup() {
           disabled={!canRun || busy}
           onClick={() => void start()}
         >
-          搬到 ciki
+          剪藏到 Ciki
           <ArrowRight />
         </Button>
         <Button
@@ -211,7 +211,7 @@ export function Popup() {
       </div>
       {!configured ? (
         <p className="mt-2 text-xs text-muted-foreground">
-          先把实例地址、ciki 地址、导入令牌填进设置，再授权这两个域名。
+          先把源站地址、ciki 地址、导入令牌填进设置，再授权这两个域名。
         </p>
       ) : null}
     </div>
