@@ -1,10 +1,12 @@
 # Ciki助手
 
+中文 · [English](README.en.md)
+
 在源文档页一键剪藏到 Ciki：借浏览器当前的登录态读取正文与附件原图，在插件里转成 ciki 的
 TipTap 结构，经你在确认小窗里点头后才写入。另含 ciki 编辑页的「粘贴补抓」：正文里标黄的
 未转存图，由插件回源站取原始字节。
 
-开发者模式加载，不上架商店。
+Ciki助手是一个 Chrome 扩展（Manifest V3）。
 
 ## 功能
 
@@ -17,18 +19,23 @@ TipTap 结构，经你在确认小窗里点头后才写入。另含 ciki 编辑�
 
 ## 安装
 
-```bash
-pnpm install
-pnpm build          # 产出 dist/
-```
+从 [Releases](https://github.com/WorkerHub/Ciki-helper/releases/latest) 页面下载最新版本的扩展 zip 包
+（Assets 里项目上传的那个，不是 GitHub 自动附带的 Source code 压缩包）。不需要安装依赖，也不需要
+自己构建。
 
-1. Chrome 打开 `chrome://extensions/`，右上角打开「开发者模式」。
-2. 「加载已解压的扩展程序」→ 选本仓库的 `dist/` 目录。
-3. 点插件图标 →「设置」完成配置（见下一节）。
+1. 把 zip 解压到一个固定的目录（以后不要删掉或挪走），确认目录里直接有 `manifest.json`。
+   有的压缩包会多套一层文件夹，选到含 `manifest.json` 的那一层。
+2. Chrome 打开 `chrome://extensions/`，打开右上角的「开发者模式」。
+3. 点「加载已解压的扩展程序」，选择第 1 步解压出来的目录。
+4. 点工具栏上的插件图标（没显示就点地址栏右侧的拼图图标里找）→「设置」，按下一节完成配置。
+
+**更新**：下载新版本的 zip，解压后覆盖同一个目录（保持 `manifest.json` 还在原来那一层），再回到
+`chrome://extensions/` 点插件卡片上的刷新按钮。浏览器是从这个目录加载插件的，目录被删除或移动后
+插件就会失效。
 
 ## 配置
 
-设置页填三项，点「保存并测试」：
+点插件图标 →「设置」，填三项后点「保存并测试」：
 
 - **源站地址**：你阅读文档的站点地址。填站点根（如 `https://wiki.example.com`）；
   站点路径带 `/wiki` 时填到 `/wiki`。
@@ -36,7 +43,7 @@ pnpm build          # 产出 dist/
 - **导入令牌**：在 ciki 的设置页生成后粘贴进来。明文只存在本机
   （`chrome.storage.local`），不随账号同步、不写日志。
 
-保存时 Chrome 会为你填的这两个域名各弹一次授权。插件没有常驻的全站权限，也不读 cookie：
+保存时浏览器会为你填的这两个域名各弹一次授权。插件没有常驻的全站权限，也不读 cookie：
 请求只带浏览器当前的会话，和你在同一浏览器里手动打开页面时一模一样；随时可以在
 `chrome://extensions/` 的扩展详情里撤销站点访问。
 
@@ -54,6 +61,8 @@ pnpm build          # 产出 dist/
 
 ## 开发
 
+想改代码或自行构建时，用 Node.js 22+ 与 pnpm：
+
 ```bash
 pnpm install        # 安装依赖
 pnpm dev            # 扩展页面的开发预览
@@ -63,6 +72,9 @@ pnpm lint           # biome 检查
 pnpm test           # vitest
 pnpm fixture        # 本地夹具服务，供开发联调
 ```
+
+`pnpm build` 产出的 `dist/` 就是可加载的扩展目录：按「安装」一节的第 2–4 步加载它，
+再配好源站与 ciki 地址即可。
 
 ## 许可证
 
