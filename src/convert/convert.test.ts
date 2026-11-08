@@ -1,0 +1,295 @@
+import { describe, expect, it } from "vitest"
+import {
+  IMAGE_STORAGE,
+  PLAIN_STORAGE,
+  SAMPLE_STORAGE
+} from "@/test/fixtures/storage"
+import { cleanConfluenceHtml } from "./cleaner"
+import { htmlToTiptapDoc } from "./schema"
+import {
+  type ImageOutcome,
+  parseStorage,
+  type RenderOptions,
+  renderStorage
+} from "./storage"
+import { applyColWidthsFromColgroup } from "./table-columns"
+
+interface ConvertOptions extends Partial<RenderOptions> {
+  outcomes?: [number, ImageOutcome][]
+}
+
+/** 完整链路：storage → 剪贴板形态 → §5 清洗 → 列宽 → TipTap JSON。 */
+function convert(storage: string, options: ConvertOptions = {}) {
+  const prepared = parseStorage(storage)
+  const outcomes = new Map<number, ImageOutcome>(options.outcomes ?? [])
+  const rendered = renderStorage(prepared, outcomes, {
+    base: options.base ?? "https://wiki.example.com/wiki",
+    attachmentUrls: options.attachmentUrls
+  })
+  const cleaned = applyColWidthsFromColgroup(cleanConfluenceHtml(rendered.html))
+  return {
+    prepared,
+    rendered,
+    cleaned,
+    doc: htmlToTiptapDoc(cleaned)
+  }
+}
+
+function nodesOfType(node: unknown, type: string): any[] {
+  const found: any[] = []
+  const visit = (current: any) => {
+    if (!current || typeof current !== "object") return
+    if (current.type === type) found.push(current)
+    for (const child of current.content ?? []) visit(child)
+  }
+  visit(node)
+  return found
+}
+
+function textOfNode(node: any): string {
+  if (typeof node.text === "string") return node.text
+  return (node.content ?? []).map(textOfNode).join("")
+}
+
+const UPLOADED = "/api/files/0f3c1a2b-4d5e-4f60-8a9b-0c1d2e3f4a5b.png"
+
+describe("code 宏（CDATA）", () => {
+  const { doc, cleaned } = convert(SAMPLE_STORAGE)
+
+  it("两个代码块都带语言", () => {
+    const blocks = nodesOfType(doc, "codeBlock")
+    expect(blocks.map((block) => block.attrs?.language)).toEqual([
+      "java",
+      "sql"
+    ])
+  })
+
+  it("CDATA 里的 < > & 逐字保留，不被当标签吃掉", () => {
+    const java = nodesOfType(doc, "codeBlock")[0]
+    expect(textOfNode(java)).toContain("// 条件：a < b && b > 0")
+    expect(textOfNode(java)).toContain(
+      'System.out.println("starting payment service")'
+    )
+  })
+
+  it("没有高亮 span 残留，代码只有一段文本", () => {
+    expect(cleaned).not.toMatch(/<span[^>]*class="token/)
+    const java = nodesOfType(doc, "codeBlock")[0]
+    expect(java.content).toHaveLength(1)
+  })
+})
+
+describe("面板宏", () => {
+  const { doc } = convert(SAMPLE_STORAGE)
+  const quotes = nodesOfType(doc, "blockquote")
+
+  it("info 与 warning 各成一个引用块", () => {
+    expect(quotes).toHaveLength(2)
+  })
+
+  it("标签区分提示与警告", () => {
+    expect(textOfNode(quotes[0])).toContain("ℹ️ 提示")
+    expect(textOfNode(quotes[1])).toContain("⚠️ 警告")
+  })
+
+  it("面板正文跟着进来", () => {
+    expect(textOfNode(quotes[0])).toContain("部署窗口为每周三 22:00–23:00。")
+    expect(textOfNode(quotes[1])).toContain("生产部署必须双人复核。")
+  })
+})
+
+describe("表格", () => {
+  const { doc, cleaned } = convert(SAMPLE_STORAGE)
+  const [table] = nodesOfType(doc, "table")
+
+  it("合并单元格保留", () => {
+    expect(nodesOfType(table, "tableHeader")[0].attrs).toMatchObject({
+      colspan: 3,
+      rowspan: 1
+    })
+    const cell = nodesOfType(table, "tableCell").find(
+      (item) => item.attrs?.rowspan === 2
+    )
+    expect(cell).toBeTruthy()
+  })
+
+  it("colgroup 列宽换算成首行 colwidth", () => {
+    expect(nodesOfType(table, "tableHeader")[0].attrs.colwidth).toEqual([
+      360, 120, 240
+    ])
+  })
+
+  it("表头与行数对得上", () => {
+    expect(nodesOfType(table, "tableRow")).toHaveLength(5)
+    expect(nodesOfType(table, "tableHeader")).toHaveLength(4)
+    expect(cleaned).not.toMatch(/confluence(Th|Td|Table)/)
+  })
+})
+
+describe("列表与任务", () => {
+  const { doc } = convert(SAMPLE_STORAGE)
+
+  it("两层嵌套的无序列表都在", () => {
+    const lists = nodesOfType(doc, "bulletList")
+    expect(lists.length).toBeGreaterThanOrEqual(3)
+  })
+
+  it("有序列表保留", () => {
+    expect(nodesOfType(doc, "orderedList")).toHaveLength(1)
+  })
+
+  it("任务项两项，勾选状态正确", () => {
+    const items = nodesOfType(doc, "taskItem")
+    expect(items.map((item) => item.attrs?.checked)).toEqual([true, false])
+    expect(textOfNode(items[0])).toContain("已完成数据库备份")
+  })
+})
+
+describe("图片引用", () => {
+  it("上传成功的附件图写成图床地址", () => {
+    const { doc } = convert(SAMPLE_STORAGE, {
+      outcomes: [
+        [1, { status: "uploaded", url: UPLOADED, filename: "arch.png" }]
+      ]
+    })
+    const image = nodesOfType(doc, "image")[0]
+    expect(image.attrs.src).toBe(UPLOADED)
+    expect(image.attrs.confluenceImg).toBe(false)
+  })
+
+  it("外链图保留原地址并打未转存标记", () => {
+    const { doc } = convert(SAMPLE_STORAGE, {
+      outcomes: [[2, { status: "external" }]]
+    })
+    const image = nodesOfType(doc, "image").find(
+      (item) => item.attrs?.originalSrc
+    )
+    expect(image?.attrs.originalSrc).toBe("https://example.com/pic/flow.png")
+    expect(image?.attrs.confluenceImg).toBe(true)
+    expect(image?.attrs.src).toBeNull()
+  })
+
+  it("下载失败的图留原链接占位，正文不中断", () => {
+    const { doc } = convert(IMAGE_STORAGE, {
+      outcomes: [
+        [
+          0,
+          {
+            status: "failed",
+            filename: "a.png",
+            downloadUrl: "https://wiki.example.com/wiki/download/a.png",
+            reason: "HTTP 404"
+          }
+        ]
+      ]
+    })
+    const image = nodesOfType(doc, "image")[0]
+    expect(image.attrs.originalSrc).toBe(
+      "https://wiki.example.com/wiki/download/a.png"
+    )
+    expect(image.attrs.confluenceImg).toBe(true)
+  })
+
+  it("附件清单里没有的图，至少留一行文件名", () => {
+    const { doc } = convert(IMAGE_STORAGE, {
+      outcomes: [
+        [0, { status: "failed", filename: "a.png", reason: "没有该附件" }]
+      ]
+    })
+    expect(JSON.stringify(doc)).toContain("🖼️ 图片未转存：a.png")
+  })
+
+  it("drawio 宏按附件图处理", () => {
+    const { doc, prepared } = convert(SAMPLE_STORAGE, {
+      outcomes: [[0, { status: "uploaded", url: UPLOADED, filename: "架构图" }]]
+    })
+    expect(prepared.refs[0]).toMatchObject({
+      kind: "drawio",
+      filename: "架构图"
+    })
+    expect(nodesOfType(doc, "image")[0].attrs.src).toBe(UPLOADED)
+  })
+
+  it("三个引用按文档顺序编号", () => {
+    const { prepared } = convert(SAMPLE_STORAGE)
+    expect(prepared.refs.map((ref) => ref.kind)).toEqual([
+      "drawio",
+      "attachment",
+      "external"
+    ])
+  })
+})
+
+describe("宏与链接", () => {
+  it("导航宏被丢弃，并在报告里留名", () => {
+    const { rendered } = convert(SAMPLE_STORAGE)
+    expect(rendered.droppedMacros).toEqual(["toc", "children"])
+  })
+
+  it("自闭合的导航宏不吞掉后面的正文", () => {
+    const { doc } = convert(SAMPLE_STORAGE)
+    expect(JSON.stringify(doc)).toContain("参考资料")
+  })
+
+  it("expand 平铺：标题保留为加粗行", () => {
+    const { doc } = convert(SAMPLE_STORAGE)
+    expect(JSON.stringify(doc)).toContain("回滚步骤")
+    expect(JSON.stringify(doc)).toContain("回滚优先于排查。")
+  })
+
+  it("status 行内宏只留文字", () => {
+    const { doc } = convert(SAMPLE_STORAGE)
+    expect(JSON.stringify(doc)).toContain("当前状态：DONE")
+  })
+
+  it("页面互链按原站地址保留（v1 不重写）", () => {
+    const { doc } = convert(SAMPLE_STORAGE)
+    const json = JSON.stringify(doc)
+    expect(json).toContain(
+      "https://wiki.example.com/wiki/pages/viewpage.action?pageId=63444152"
+    )
+    expect(json).toContain("支付服务概览")
+  })
+
+  it("非图片附件保留原链接并记进报告", () => {
+    const { rendered, doc } = convert(SAMPLE_STORAGE, {
+      attachmentUrls: {
+        "runbook.pdf":
+          "https://wiki.example.com/wiki/download/attachments/1/runbook.pdf"
+      }
+    })
+    expect(rendered.attachmentLinks).toEqual([
+      {
+        filename: "runbook.pdf",
+        url: "https://wiki.example.com/wiki/download/attachments/1/runbook.pdf"
+      }
+    ])
+    expect(JSON.stringify(doc)).toContain("部署 Runbook")
+  })
+})
+
+describe("边角", () => {
+  it("没有宏的普通正文照样转", () => {
+    const { doc } = convert(PLAIN_STORAGE)
+    expect(JSON.stringify(doc)).toContain("只有一段话。")
+  })
+
+  it("空正文得到空文档，不抛错", () => {
+    const { doc } = convert("<p></p>")
+    expect(doc.type).toBe("doc")
+    expect(doc.content ?? []).toEqual([])
+  })
+
+  it("图片两侧不会留空段落", () => {
+    const { doc } = convert(IMAGE_STORAGE, {
+      outcomes: [
+        [0, { status: "uploaded", url: UPLOADED, filename: "a.png" }],
+        [1, { status: "uploaded", url: UPLOADED, filename: "b.png" }]
+      ]
+    })
+    const paragraphs = nodesOfType(doc, "paragraph")
+    expect(paragraphs.every((item) => (item.content ?? []).length > 0)).toBe(
+      true
+    )
+  })
+})
