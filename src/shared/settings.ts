@@ -13,6 +13,9 @@ export interface Settings {
   confluenceUrl: string
   cikiUrl: string
   importToken: string
+  /** 上次剪藏选的空间；空间列表接口不给 isDefault 标记，所以自己记一个。 */
+  defaultSpaceId: string
+  defaultSpaceName: string
   defaultParentId: string | null
   defaultParentTitle: string
   /** 探测成功后记住的可用基址（含 contextPath），下次优先用它。 */
@@ -23,6 +26,8 @@ export const EMPTY_SETTINGS: Settings = {
   confluenceUrl: "",
   cikiUrl: "",
   importToken: "",
+  defaultSpaceId: "",
+  defaultSpaceName: "",
   defaultParentId: null,
   defaultParentTitle: "",
   confluenceBase: ""

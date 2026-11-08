@@ -3,7 +3,9 @@
  *
  * 两个服务：
  * - :8811 假 Confluence：内容页（带 meta ajs-page-id）、REST 正文、附件清单、附件原图；
- * - :8812 假 ciki：四个导入接口（Bearer 令牌）、图床回读、补抓桥的测试页。
+ * - :8812 假 ciki：五个导入接口（Bearer 令牌）、图床回读、补抓桥的测试页。
+ *   `/api/import/spaces` 固定回两项：默认空间在前的 `space-default` 与 `space-dev`，
+ *   其它空间 id 一律 403 SPACE_FORBIDDEN；`/__imports` 把收到的导入调用攒着给测试核对落点。
  *
  * 所有请求都带时间戳记在内存里，`GET /__log` 取出来就能核对「串行 + 间隔 ≥1000ms」。
  * 报告与 README 里必须写清楚：这组数字来自夹具，真实例由 QA 在真页上验。
@@ -194,6 +196,33 @@ const confluence = createServer(async (req, res) => {
 const pages = new Map()
 const files = new Map()
 
+// 空间替身：默认空间在前（真实接口也这么排序），第二项用来验「换空间后父级跟着换」。
+const SPACES = [
+  { id: "space-default", name: "默认空间" },
+  { id: "space-dev", name: "研发空间" }
+]
+const DEFAULT_SPACE_ID = "space-default"
+const PARENTS_BY_SPACE = {
+  "space-default": [
+    { id: "p-root", title: "团队知识库", parentId: null },
+    { id: "p-backend", title: "后端", parentId: "p-root" }
+  ],
+  "space-dev": [{ id: "p-dev", title: "研发文档", parentId: null }]
+}
+/** 本次进程里收到的导入调用（供测试核对落点，不透出 contentJson）。 */
+const imports = []
+
+/** 缺省与空串都落默认空间（与后端契约一致）；不认识的空间一律拒绝。 */
+function resolveSpace(value) {
+  const id = typeof value === "string" && value.trim() ? value.trim() : ""
+  const candidate = id || DEFAULT_SPACE_ID
+  return SPACES.some((space) => space.id === candidate) ? candidate : null
+}
+
+function recordImport(path, spaceId, title) {
+  imports.push({ path, spaceId, title: title || "" })
+}
+
 const bridgeTestHtml = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
 <title>补抓桥测试页（夹具）</title></head><body>
 <h1>补抓桥测试页（夹具）</h1>
@@ -227,9 +256,11 @@ const ciki = createServer(async (req, res) => {
 
   if (url.pathname === "/__log")
     return sendJson(res, 200, JSON.parse(log.json()))
+  if (url.pathname === "/__imports") return sendJson(res, 200, imports)
   if (url.pathname === "/__reset") {
     log.reset()
     pages.clear()
+    imports.length = 0
     return sendJson(res, 200, { ok: true })
   }
   if (url.pathname === "/__captured") {
@@ -246,16 +277,33 @@ const ciki = createServer(async (req, res) => {
     }
   }
 
+  if (url.pathname === "/api/import/spaces") {
+    return sendJson(res, 200, SPACES)
+  }
+
   if (url.pathname === "/api/import/parents") {
-    return sendJson(res, 200, [
-      { id: "p-root", title: "团队知识库", parentId: null },
-      { id: "p-backend", title: "后端", parentId: "p-root" }
-    ])
+    const spaceId = resolveSpace(url.searchParams.get("space_id"))
+    recordImport("parents", spaceId || "", "")
+    if (!spaceId) {
+      return sendJson(res, 403, {
+        error: "Space forbidden",
+        code: "SPACE_FORBIDDEN"
+      })
+    }
+    return sendJson(res, 200, PARENTS_BY_SPACE[spaceId])
   }
 
   if (url.pathname === "/api/import/check" && req.method === "POST") {
     const body = JSON.parse((await readBody(req)).toString() || "{}")
-    const key = `${body.parentId ?? "root"}::${body.title}`
+    const spaceId = resolveSpace(body.space_id)
+    recordImport("check", spaceId || "", body.title)
+    if (!spaceId) {
+      return sendJson(res, 403, {
+        error: "Space forbidden",
+        code: "SPACE_FORBIDDEN"
+      })
+    }
+    const key = `${spaceId}::${body.parentId ?? "root"}::${body.title}`
     const hit = pages.get(key)
     return sendJson(
       res,
@@ -282,13 +330,21 @@ const ciki = createServer(async (req, res) => {
     if (!body.title || !body.contentJson) {
       return sendJson(res, 400, { error: "title/contentJson required" })
     }
-    const key = `${body.parentId ?? "root"}::${body.title}`
+    const spaceId = resolveSpace(body.space_id)
+    recordImport("pages", spaceId || "", body.title)
+    if (!spaceId) {
+      return sendJson(res, 403, {
+        error: "Space forbidden",
+        code: "SPACE_FORBIDDEN"
+      })
+    }
+    const key = `${spaceId}::${body.parentId ?? "root"}::${body.title}`
     const existing = pages.get(key)
     const id =
       existing && body.conflict === "update" ? existing.id : randomUUID()
     pages.set(key, { id, body })
     console.log(
-      `[fixture] import/pages conflict=${body.conflict} bytes=${body.contentJson.length} pageId=${id}`
+      `[fixture] import/pages space=${spaceId} conflict=${body.conflict} bytes=${body.contentJson.length} pageId=${id}`
     )
     // 真实后端回的是根相对路径（/p/<id>），夹具也照这个口径，别把前端的补全掩盖掉
     return sendJson(res, existing && body.conflict === "update" ? 200 : 201, {

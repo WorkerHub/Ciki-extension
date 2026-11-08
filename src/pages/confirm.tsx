@@ -2,6 +2,7 @@ import "@/index.css"
 import { ArrowUpRight, Loader2, RotateCcw } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { createRoot } from "react-dom/client"
+import type { ImportSpace } from "@/ciki/api"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -22,8 +23,10 @@ import {
   executeImport,
   type ImportContext,
   type ImportResult,
+  type ParentOption,
   type ProgressUpdate,
-  prepareImport
+  prepareImport,
+  selectSpace
 } from "@/flow/import"
 import { reportLines } from "@/flow/report"
 import { ImportError, toImportError } from "@/shared/errors"
@@ -50,6 +53,11 @@ export function Confirm() {
   const [phase, setPhase] = useState<Phase>("loading")
   const [confirm, setConfirm] = useState<ConfirmInput | null>(null)
   const [title, setTitle] = useState("")
+  const [spaces, setSpaces] = useState<ImportSpace[]>([])
+  const [spaceId, setSpaceId] = useState("")
+  const [parents, setParents] = useState<ParentOption[]>([])
+  const [switching, setSwitching] = useState(false)
+  const [spaceFailure, setSpaceFailure] = useState<FailureView | null>(null)
   const [parentId, setParentId] = useState<string | null>(null)
   const [conflict, setConflict] = useState("create_copy")
   const [conflictExists, setConflictExists] = useState(false)
@@ -81,6 +89,9 @@ export function Confirm() {
         contextRef.current = prepared.context
         setConfirm(prepared.confirm)
         setTitle(prepared.confirm.sourceTitle)
+        setSpaces(prepared.confirm.spaces)
+        setSpaceId(prepared.confirm.defaultSpaceId)
+        setParents(prepared.confirm.parents)
         setParentId(prepared.confirm.defaultParentId)
         setConflictExists(prepared.confirm.conflict.exists)
         setConflict(prepared.confirm.conflict.exists ? "update" : "create_copy")
@@ -94,12 +105,12 @@ export function Confirm() {
   }, [])
 
   const recheck = useCallback(
-    (nextTitle: string, nextParent: string | null) => {
+    (nextTitle: string, nextParent: string | null, nextSpace: string) => {
       const context = contextRef.current
       if (!context) return
       if (checkTimer.current) window.clearTimeout(checkTimer.current)
       checkTimer.current = window.setTimeout(() => {
-        void checkConflict(context, nextTitle.trim(), nextParent)
+        void checkConflict(context, nextSpace, nextTitle.trim(), nextParent)
           .then((value) => {
             setConflictExists(value.exists)
             setConflict((current) =>
@@ -118,9 +129,30 @@ export function Confirm() {
     []
   )
 
+  /** 切空间：父级树重拉、父级落回记住的那一项；失败就退回原空间，不动已选好的父级。 */
+  const changeSpace = async (next: string) => {
+    const context = contextRef.current
+    if (!context || switching || next === spaceId) return
+    const previous = spaceId
+    setSwitching(true)
+    setSpaceFailure(null)
+    try {
+      const switched = await selectSpace(context, next)
+      setSpaceId(next)
+      setParents(switched.parents)
+      setParentId(switched.parentId)
+      recheck(title, switched.parentId, next)
+    } catch (error) {
+      setSpaceId(previous)
+      setSpaceFailure(viewOf(error))
+    } finally {
+      setSwitching(false)
+    }
+  }
+
   const start = async () => {
     const context = contextRef.current
-    if (!context || !title.trim()) return
+    if (!context || !title.trim() || !spaceId) return
     setPhase("running")
     setProgress([])
     try {
@@ -128,6 +160,7 @@ export function Confirm() {
         context,
         {
           title: title.trim(),
+          spaceId,
           parentId,
           conflict: conflict === "update" ? "update" : "create_copy"
         },
@@ -171,7 +204,7 @@ export function Confirm() {
             {phase === "loading" ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="animate-spin" /> 正在读取正文、附件清单与
-                ciki 页面树…
+                ciki 空间…
               </div>
             ) : null}
 
@@ -188,19 +221,58 @@ export function Confirm() {
                       value={title}
                       onChange={(event) => {
                         setTitle(event.target.value)
-                        recheck(event.target.value, parentId)
+                        recheck(event.target.value, parentId, spaceId)
                       }}
                     />
                   </div>
 
                   <div className="space-y-1.5">
+                    <Label>空间</Label>
+                    <Select
+                      value={spaceId}
+                      disabled={switching}
+                      onValueChange={(value) => void changeSpace(value)}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {spaces.map((space) => (
+                          <SelectItem key={space.id} value={space.id}>
+                            {space.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      这一页写到哪个空间；父级列表跟着空间走。
+                      {switching ? " 正在读取该空间的父级…" : ""}
+                    </p>
+                  </div>
+
+                  {spaceFailure ? (
+                    <Alert variant="destructive">
+                      <AlertTitle>{spaceFailure.title}</AlertTitle>
+                      <AlertDescription>
+                        <div>{spaceFailure.message}</div>
+                        {spaceFailure.hint ? (
+                          <div className="mt-1 text-xs">
+                            {spaceFailure.hint}
+                          </div>
+                        ) : null}
+                      </AlertDescription>
+                    </Alert>
+                  ) : null}
+
+                  <div className="space-y-1.5">
                     <Label>父级</Label>
                     <Select
                       value={parentId ?? ROOT_VALUE}
+                      disabled={switching}
                       onValueChange={(value) => {
                         const next = value === ROOT_VALUE ? null : value
                         setParentId(next)
-                        recheck(title, next)
+                        recheck(title, next, spaceId)
                       }}
                     >
                       <SelectTrigger className="w-full">
@@ -210,7 +282,7 @@ export function Confirm() {
                         <SelectItem value={ROOT_VALUE}>
                           顶层（不挂父页）
                         </SelectItem>
-                        {confirm.parents.map((parent) => (
+                        {parents.map((parent) => (
                           <SelectItem key={parent.id} value={parent.id}>
                             {`${"　".repeat(parent.depth)}${parent.title}`}
                           </SelectItem>
@@ -250,7 +322,13 @@ export function Confirm() {
 
                   <Button
                     className="w-full"
-                    disabled={!title.trim() || conflict === "cancel"}
+                    disabled={
+                      !title.trim() ||
+                      conflict === "cancel" ||
+                      switching ||
+                      Boolean(spaceFailure) ||
+                      !spaceId
+                    }
                     onClick={() => void start()}
                   >
                     开始剪藏

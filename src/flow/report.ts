@@ -13,6 +13,8 @@ export interface ImportReport {
   sourceUrl: string
   pageId: string
   pageUrl: string
+  /** 写入的空间名（接口没给名字时为空串，报告里省略这一行）。 */
+  spaceName: string
   conflict: "update" | "create_copy"
   images: {
     total: number
@@ -29,6 +31,7 @@ export interface ImportReport {
 
 export function reportLines(report: ImportReport): string[] {
   const lines: string[] = []
+  if (report.spaceName) lines.push(`已写入空间：${report.spaceName}`)
   const images = report.images
   lines.push(
     `图片 ${images.total} 张：转存 ${images.uploaded} 张` +
