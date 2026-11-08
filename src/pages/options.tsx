@@ -46,7 +46,7 @@ export function Options() {
     if (!confluence) {
       setStatus({
         tone: "error",
-        text: "Confluence 实例地址要是完整的 http(s) 地址"
+        text: "源站地址要是完整的 http(s) 地址"
       })
       return null
     }
@@ -72,7 +72,7 @@ export function Options() {
     if (!granted) {
       setStatus({
         tone: "error",
-        text: "没有域名权限：插件读不到 Confluence，也无法写 ciki。请重新保存并点「允许」。"
+        text: "没有域名权限：插件读不到源站，也无法写 ciki。请重新保存并点「允许」。"
       })
       return null
     }
@@ -110,7 +110,7 @@ export function Options() {
       if (!confluence.ok) {
         setStatus({
           tone: "error",
-          text: `Confluence：${confluence.message}${
+          text: `源站：${confluence.message}${
             confluence.hint ? `（${confluence.hint}）` : ""
           }`
         })
@@ -132,7 +132,7 @@ export function Options() {
       }
       setStatus({
         tone: "ok",
-        text: `都通了：Confluence 只读接口 200，ciki 导入接口读到 ${parentCount} 个父级`
+        text: `都通了：源站只读接口 200，ciki 导入接口读到 ${parentCount} 个父级`
       })
     } catch (error) {
       setStatus({ tone: "error", text: describeImportError(error) })
@@ -153,7 +153,7 @@ export function Options() {
   return (
     <div className="mx-auto w-full max-w-[720px] p-6">
       <header className="mb-4">
-        <h1 className="text-lg font-semibold">ciki 搬运助手 · 设置</h1>
+        <h1 className="text-lg font-semibold">Ciki助手 · 设置</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           两个地址都由你填写，插件里没有任何写死的域名；保存时只为这两个域名申请访问权限，
           随时可以在 Chrome 的扩展详情里撤销。
@@ -166,17 +166,18 @@ export function Options() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="confluence">Confluence 实例地址</Label>
+            <Label htmlFor="confluence">源站地址</Label>
             <Input
               id="confluence"
               value={form.confluenceUrl}
-              placeholder="https://confluence.example.com"
+              placeholder="https://wiki.example.com"
               onChange={(event) =>
                 update({ confluenceUrl: event.target.value })
               }
             />
             <p className="text-xs text-muted-foreground">
-              自建版填站点根地址；Cloud 版填到 /wiki。填错会在「测试」里报出来。
+              填站点根地址；带 /wiki 的站点填到 /wiki。
+              填错会在「测试」里报出来。
             </p>
           </div>
 
@@ -235,7 +236,7 @@ export function Options() {
               </>
             ) : (
               <span className="text-muted-foreground">
-                还没有——下次搬运确认时选的父级会被记住
+                还没有——下次剪藏确认时选的父级会被记住
               </span>
             )}
           </div>
@@ -268,8 +269,8 @@ export function Options() {
 
       <p className="mt-4 text-xs text-muted-foreground">
         权限说明：插件只要 activeTab / scripting / storage
-        三项，加上你这两个域名的按需授权； 不读取、不存储、不外传 Confluence 的
-        cookie 与凭据，请求只带浏览器当前登录态。
+        三项，加上你这两个域名的按需授权； 不读取、不存储、不外传源站的 cookie
+        与凭据，请求只带浏览器当前登录态。
       </p>
     </div>
   )

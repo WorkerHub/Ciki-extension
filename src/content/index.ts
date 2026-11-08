@@ -44,7 +44,7 @@ async function startRun(): Promise<void> {
   if (starting) return
   const probe = currentProbe()
   if (!probe.pageId) {
-    console.info("[ciki] 当前页没有 pageId，可能不是 Confluence 内容页")
+    console.info("[ciki] 当前页没有 pageId，可能不是源站的内容页")
     return
   }
   starting = true

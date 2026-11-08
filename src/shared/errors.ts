@@ -19,11 +19,11 @@ export type ImportErrorCode =
 const STOP_CODES = new Set<ImportErrorCode>(["LOGIN_REQUIRED", "RATE_LIMITED"])
 
 const TITLES: Record<ImportErrorCode, string> = {
-  LOGIN_REQUIRED: "Confluence 登录已失效",
-  RATE_LIMITED: "Confluence 正在限流",
-  NOT_FOUND: "Confluence 上找不到这一页",
-  NETWORK: "连不上 Confluence",
-  HTTP: "Confluence 接口返回异常",
+  LOGIN_REQUIRED: "源站登录已失效",
+  RATE_LIMITED: "源站正在限流",
+  NOT_FOUND: "源站上找不到这一页",
+  NETWORK: "连不上源站",
+  HTTP: "源站接口返回异常",
   TOKEN_INVALID: "ciki 导入令牌无效",
   PAYLOAD_TOO_LARGE: "页面内容超出 ciki 上限",
   BAD_RESPONSE: "接口返回的结构对不上",
@@ -32,14 +32,14 @@ const TITLES: Record<ImportErrorCode, string> = {
 
 const HINTS: Record<ImportErrorCode, string> = {
   LOGIN_REQUIRED:
-    "在浏览器里重新登录 Confluence 后再试。插件不会替你登录，也不会读取 cookie。",
+    "在浏览器里重新登录源站后再试。插件不会替你登录，也不会读取 cookie。",
   RATE_LIMITED:
-    "插件已立即停手，不会重试。等几分钟再手动搬这一页，不要连着重试。",
-  NOT_FOUND: "检查设置里的实例地址是否填对，以及这个账号有没有该页的浏览权限。",
-  NETWORK: "检查网络、代理，或实例地址是否可达。",
-  HTTP: "看下面的状态码；403 通常是接口权限，404 可能是实例地址的 contextPath 不对。",
+    "插件已立即停手，不会重试。等几分钟再手动剪藏这一页，不要连着重试。",
+  NOT_FOUND: "检查设置里的源站地址是否填对，以及这个账号有没有该页的浏览权限。",
+  NETWORK: "检查网络、代理，或源站地址是否可达。",
+  HTTP: "看下面的状态码；403 通常是接口权限，404 可能是源站地址的 contextPath 不对。",
   TOKEN_INVALID: "到 ciki 设置页重新生成导入令牌，填进插件设置。",
-  PAYLOAD_TOO_LARGE: "这一页内容过大，ciki 存不下；拆页后再搬。",
+  PAYLOAD_TOO_LARGE: "这一页内容过大，ciki 存不下；拆页后再剪藏。",
   BAD_RESPONSE: "ciki 的导入接口返回了预期之外的字段，请把这条报给维护者。",
   UNEXPECTED: "把这条报给维护者，附上截图与时间。"
 }

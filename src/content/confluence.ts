@@ -34,8 +34,8 @@ function createButton(onStart: () => void): HTMLButtonElement {
   const button = document.createElement("button")
   button.id = BUTTON_ID
   button.type = "button"
-  button.textContent = "搬到 ciki"
-  button.title = "把这一页整页搬到 ciki（逐页手动，不做批量）"
+  button.textContent = "剪藏到 Ciki"
+  button.title = "把这一页整页剪藏到 Ciki（逐页手动，不做批量）"
   button.setAttribute("style", BUTTON_STYLE)
   button.addEventListener("click", (event) => {
     event.preventDefault()

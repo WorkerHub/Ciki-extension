@@ -1,11 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "ciki 搬运助手",
+  "name": "Ciki助手",
   "version": "1.0.0",
-  "description": "把 Confluence 页面整页搬到 ciki：借浏览器登录态只读取正文与附件原图，经确认后写入 ciki。",
+  "description": "在源文档页一键剪藏到 Ciki：借浏览器登录态读取正文与附件原图，经你确认后写入。",
   "action": {
     "default_popup": "popup.html",
-    "default_title": "ciki 搬运助手"
+    "default_title": "Ciki助手"
   },
   "options_ui": {
     "page": "options.html",

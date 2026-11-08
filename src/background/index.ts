@@ -54,15 +54,12 @@ async function getQueue(): Promise<ConfluenceQueue> {
 async function assertAllowed(url: string): Promise<Settings> {
   const settings = await loadSettings()
   if (!settings.confluenceUrl) {
-    throw new ImportError("UNEXPECTED", "还没填写 Confluence 实例地址", {
-      hint: "点插件图标 →「设置」填实例地址，并允许访问该域名。"
+    throw new ImportError("UNEXPECTED", "还没填写源站地址", {
+      hint: "点插件图标 →「设置」填源站地址，并允许访问该域名。"
     })
   }
   if (!isSameOrigin(url, settings.confluenceUrl)) {
-    throw new ImportError(
-      "UNEXPECTED",
-      "拒绝请求：这个地址不属于已配置的 Confluence 实例"
-    )
+    throw new ImportError("UNEXPECTED", "拒绝请求：这个地址不属于已配置的源站")
   }
   return settings
 }
@@ -86,10 +83,7 @@ async function fetchJson(url: string): Promise<{ json: unknown }> {
   try {
     return { json: text ? JSON.parse(text) : null }
   } catch {
-    throw new ImportError(
-      "BAD_RESPONSE",
-      "Confluence 返回的不是 JSON（实例地址可能不对）"
-    )
+    throw new ImportError("BAD_RESPONSE", "源站返回的不是 JSON（地址可能不对）")
   }
 }
 
@@ -134,7 +128,7 @@ async function prepareRun(
   if (!probe.pageId) {
     throw new ImportError(
       "NOT_FOUND",
-      "当前页没有 pageId，先打开一篇 Confluence 内容页"
+      "当前页没有 pageId，先打开一篇源站的文档页"
     )
   }
 

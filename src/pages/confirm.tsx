@@ -70,10 +70,10 @@ export function Confirm() {
         if (!job) {
           throw new ImportError(
             "NOT_FOUND",
-            "这一批的上下文已经丢了（浏览器重启过，或这次搬运已经完成）",
+            "这一批的上下文已经丢了（浏览器重启过，或这次剪藏已经完成）",
             {
-              title: "这次搬运已经结束",
-              hint: "回 Confluence 页再点一次「搬到 ciki」重新来一批。"
+              title: "这次剪藏已经结束",
+              hint: "回源站页面再点一次「剪藏到 Ciki」重新来一批。"
             }
           )
         }
@@ -157,7 +157,7 @@ export function Confirm() {
   return (
     <div className="flex h-screen flex-col">
       <div className="border-b px-4 py-3">
-        <div className="text-sm font-semibold">搬到 ciki</div>
+        <div className="text-sm font-semibold">剪藏到 Ciki</div>
         <div className="truncate text-xs text-muted-foreground">
           {confirm
             ? confirm.sourceUrl || `pageId ${confirm.pageId}`
@@ -253,7 +253,7 @@ export function Confirm() {
                     disabled={!title.trim() || conflict === "cancel"}
                     onClick={() => void start()}
                   >
-                    开始搬运
+                    开始剪藏
                   </Button>
                 </CardContent>
               </Card>
@@ -263,7 +263,7 @@ export function Confirm() {
               <div className="space-y-2 text-sm">
                 <div className="flex items-center gap-2">
                   <Loader2 className="animate-spin" />{" "}
-                  正在搬运，逐张图片串行处理
+                  正在剪藏，逐张图片串行处理
                 </div>
                 <div className="text-xs text-muted-foreground">
                   {progress[progress.length - 1] || "准备中…"}

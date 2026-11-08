@@ -101,7 +101,7 @@ export class ConfluenceQueue {
         response.headers.get("retry-after") || "",
         10
       )
-      throw new ImportError("RATE_LIMITED", "Confluence 返回 429", {
+      throw new ImportError("RATE_LIMITED", "源站返回 429", {
         retryAfter: Number.isFinite(retryAfter) ? retryAfter : undefined
       })
     }

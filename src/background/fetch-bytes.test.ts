@@ -102,7 +102,7 @@ describe("附件字节下载", () => {
   it("不属于实例的地址拒绝下载（绝不拿用户会话去取任意 URL）", async () => {
     const { fetchBytes } = await import("./index")
     await expect(fetchBytes("https://evil.example.com/a.png")).rejects.toThrow(
-      /不属于已配置的 Confluence 实例/
+      /不属于已配置的源站/
     )
   }, 20_000)
 })

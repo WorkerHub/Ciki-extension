@@ -70,10 +70,7 @@ export function createBridge(deps: BridgeDeps): Bridge {
       return
     }
     if (!deps.isAllowedSrc(src)) {
-      deps.onFailure(
-        "这张图不在已配置的 Confluence 实例上，插件不会用登录态去取",
-        src
-      )
+      deps.onFailure("这张图不在已配置的源站上，插件不会用登录态去取", src)
       return
     }
     const reply = await deps.fetchBytes(src)

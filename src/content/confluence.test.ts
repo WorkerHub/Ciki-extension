@@ -62,7 +62,7 @@ describe("标题旁的入口按钮", () => {
     const onStart = vi.fn()
     expect(mountConfluenceButton(probed, onStart, doc)).toBe(true)
     const button = doc.getElementById(BUTTON_ID)
-    expect(button?.textContent).toBe("搬到 ciki")
+    expect(button?.textContent).toBe("剪藏到 Ciki")
     expect(button?.previousElementSibling?.tagName).toBe("H1")
   })
 
