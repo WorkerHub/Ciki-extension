@@ -116,13 +116,13 @@ export function Options() {
         })
         return
       }
-      let parentCount = 0
+      let spaceCount = 0
       try {
-        const parents = await new ImportApi(
+        const spaces = await new ImportApi(
           saved.cikiUrl,
           saved.importToken
-        ).parents()
-        parentCount = parents.length
+        ).spaces()
+        spaceCount = spaces.length
       } catch (error) {
         setStatus({
           tone: "error",
@@ -130,15 +130,31 @@ export function Options() {
         })
         return
       }
+      if (spaceCount === 0) {
+        setStatus({
+          tone: "error",
+          text: "导入令牌有效，但你在 ciki 里没有可写入（editor 及以上）的空间：让空间管理员给你加权限后再剪藏。"
+        })
+        return
+      }
       setStatus({
         tone: "ok",
-        text: `都通了：源站只读接口 200，ciki 导入接口读到 ${parentCount} 个父级`
+        text: `都通了：源站只读接口 200，ciki 读到 ${spaceCount} 个可写空间`
       })
     } catch (error) {
       setStatus({ tone: "error", text: describeImportError(error) })
     } finally {
       setBusy(false)
     }
+  }
+
+  const clearDefaultSpace = async () => {
+    const saved = await saveSettings({
+      defaultSpaceId: "",
+      defaultSpaceName: ""
+    })
+    setForm(saved)
+    setStatus({ tone: "info", text: "已清掉记住的默认空间" })
   }
 
   const clearDefaultParent = async () => {
@@ -220,6 +236,34 @@ export function Options() {
               仅保存
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle className="text-sm">默认空间</CardTitle>
+        </CardHeader>
+        <CardContent className="flex items-center justify-between gap-3">
+          <div className="text-sm">
+            {form.defaultSpaceName ? (
+              <>
+                记住的默认空间：
+                <span className="font-medium">{form.defaultSpaceName}</span>
+              </>
+            ) : (
+              <span className="text-muted-foreground">
+                还没有——下次剪藏确认时选的空间会被记住
+              </span>
+            )}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!form.defaultSpaceName}
+            onClick={() => void clearDefaultSpace()}
+          >
+            清除
+          </Button>
         </CardContent>
       </Card>
 

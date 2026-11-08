@@ -169,6 +169,11 @@ export function Popup() {
           }
         />
         <Row
+          ok={Boolean(settings?.defaultSpaceName)}
+          label="默认空间"
+          detail={settings?.defaultSpaceName || "上次剪藏时记住"}
+        />
+        <Row
           ok={Boolean(settings?.defaultParentTitle)}
           label="默认父级"
           detail={settings?.defaultParentTitle || "上次剪藏时记住"}

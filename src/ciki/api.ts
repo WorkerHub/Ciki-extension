@@ -1,14 +1,21 @@
 /**
  * ciki 导入接口客户端 —— 插件里唯一跟 ciki 说话的地方。
  *
- * 字段一律按 #6 已冻结进 Ciki 仓 docs/api-contract.md 的 camelCase：
- * - GET  /api/import/parents  → [{ id, title, parentId }]
- * - POST /api/import/check    ← { title, parentId } → { exists, pageId? }
- * - POST /api/import/files    （multipart，字段名 file）→ { url }
- * - POST /api/import/pages    ← { title, parentId, contentJson, conflict } → { pageId, url }
+ * 字段按 Ciki 仓 docs/api-contract.md 冻结的契约：会话侧 camelCase，
+ * 导入侧保留 space_id 这组 snake_case（插件导出契约就是这么定的）。
+ * - GET  /api/import/spaces           → [{ id, name }]（可编辑的空间，默认空间在前）
+ * - GET  /api/import/parents?space_id= → [{ id, title, parentId }]
+ * - POST /api/import/check            ← { title, parentId, space_id } → { exists, pageId? }
+ * - POST /api/import/files            （multipart，字段名 file）→ { url }
+ * - POST /api/import/pages            ← { title, parentId, space_id, contentJson, conflict } → { pageId, url }
  * 鉴权是导入令牌：Authorization: Bearer <token>，不接受会话 Cookie（职责分离）。
  */
-import { ImportError } from "@/shared/errors"
+import { ImportError, type ImportErrorCode } from "@/shared/errors"
+
+export interface ImportSpace {
+  id: string
+  name: string
+}
 
 export interface ImportParent {
   id: string
@@ -23,6 +30,8 @@ export interface CheckResult {
 
 export interface CreatePageInput {
   title: string
+  /** 写入落点；插件始终显式给出，不依赖服务端的默认空间兜底。 */
+  spaceId: string
   parentId: string | null
   contentJson: string
   conflict: "update" | "create_copy"
@@ -45,6 +54,28 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value : ""
+}
+
+/** ciki 导入接口用 code 表达的业务错误，在这里翻成人话。 */
+const SPACE_ERRORS: Record<
+  string,
+  { code: ImportErrorCode; title: string; hint: string }
+> = {
+  SPACE_FORBIDDEN: {
+    code: "SPACE_FORBIDDEN",
+    title: "没有这个空间的写入权限",
+    hint: "换一个空间，或让空间管理员把你的角色改成 editor 及以上。"
+  },
+  SPACE_MISMATCH: {
+    code: "SPACE_MISMATCH",
+    title: "父页不在所选空间",
+    hint: "关掉弹窗重新剪藏一次，让空间与父级重新读一遍。"
+  },
+  DEFAULT_SPACE_MISSING: {
+    code: "DEFAULT_SPACE_MISSING",
+    title: "ciki 还没完成数据库升级",
+    hint: "让管理员在 ciki 的「系统管理 → 数据库维护」里做一次升级，然后重新剪藏。"
+  }
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -104,13 +135,50 @@ export class ImportApi {
     if (!response.ok) {
       const body = asRecord(await readJson(response))
       const detail = asString(body.error) || `HTTP ${response.status}`
+      const mapped = SPACE_ERRORS[asString(body.code)]
+      if (mapped) {
+        throw new ImportError(mapped.code, detail, {
+          title: mapped.title,
+          hint: mapped.hint,
+          status: response.status
+        })
+      }
       throw new ImportError("HTTP", detail, { status: response.status })
     }
     return readJson(response)
   }
 
-  async parents(): Promise<ImportParent[]> {
-    const body = await this.request("/api/import/parents")
+  /** 导入令牌可写入的空间；默认空间排在最前，但接口不给 isDefault 标记。 */
+  async spaces(): Promise<ImportSpace[]> {
+    let body: unknown
+    try {
+      body = await this.request("/api/import/spaces")
+    } catch (error) {
+      // 老版本 ciki 没有这个端点：别报成「结构对不上」，直接说清楚要升级
+      if (error instanceof ImportError && error.status === 404) {
+        throw new ImportError("HTTP", "ciki 上没有 /api/import/spaces（404）", {
+          status: 404,
+          title: "ciki 还没有空间接口",
+          hint: "插件与 ciki 版本对不上：让管理员把 ciki 升级到带空间（Space）的版本后再剪藏。"
+        })
+      }
+      throw error
+    }
+    if (!Array.isArray(body)) {
+      throw new ImportError("BAD_RESPONSE", "/api/import/spaces 返回的不是数组")
+    }
+    return body
+      .map((item) => {
+        const record = asRecord(item)
+        const id = asString(record.id)
+        return { id, name: asString(record.name) || id }
+      })
+      .filter((space) => space.id !== "")
+  }
+
+  async parents(spaceId = ""): Promise<ImportParent[]> {
+    const query = spaceId ? `?space_id=${encodeURIComponent(spaceId)}` : ""
+    const body = await this.request(`/api/import/parents${query}`)
     if (!Array.isArray(body)) {
       throw new ImportError(
         "BAD_RESPONSE",
@@ -127,12 +195,16 @@ export class ImportApi {
     })
   }
 
-  async check(title: string, parentId: string | null): Promise<CheckResult> {
+  async check(
+    title: string,
+    parentId: string | null,
+    spaceId: string
+  ): Promise<CheckResult> {
     const body = asRecord(
       await this.request("/api/import/check", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, parentId })
+        body: JSON.stringify({ title, parentId, space_id: spaceId })
       })
     )
     return {
@@ -163,6 +235,7 @@ export class ImportApi {
         body: JSON.stringify({
           title: input.title,
           parentId: input.parentId,
+          space_id: input.spaceId,
           contentJson: input.contentJson,
           conflict: input.conflict
         })

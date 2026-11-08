@@ -14,7 +14,8 @@ import {
   cikiPageUrl,
   dataUrlToBlob,
   ImportApi,
-  type ImportParent
+  type ImportParent,
+  type ImportSpace
 } from "@/ciki/api"
 import { indexAttachments, matchAttachment } from "@/confluence/attachments"
 import type { Attachment, ConfluenceContent } from "@/confluence/client"
@@ -71,6 +72,9 @@ export interface ConfirmInput {
   sourceTitle: string
   sourceUrl: string
   pageId: string
+  /** 令牌可写入的空间，默认空间在前（接口不给 isDefault 标记）。 */
+  spaces: ImportSpace[]
+  defaultSpaceId: string
   parents: ParentOption[]
   defaultParentId: string | null
   conflict: { exists: boolean; pageId?: string }
@@ -84,12 +88,15 @@ export interface ImportContext {
   prepared: PreparedStorage
   api: ImportApi
   pageId: string
+  spaces: ImportSpace[]
   parents: ParentOption[]
   warnings: string[]
 }
 
 export interface ConfirmDecision {
   title: string
+  /** 写入落点；由弹窗里的空间下拉决定，显式传给写接口。 */
+  spaceId: string
   parentId: string | null
   conflict: "update" | "create_copy"
 }
@@ -171,6 +178,19 @@ function defaultParentId(
     : null
 }
 
+/**
+ * 预选哪个空间：上次用过的还在列表里就用它（空间被删 / 权限被收回时回退），
+ * 否则用列表第一项——接口保证默认空间在前。
+ */
+export function chooseSpaceId(
+  remembered: string,
+  spaces: ImportSpace[]
+): string {
+  const id = remembered.trim()
+  if (id && spaces.some((space) => space.id === id)) return id
+  return spaces[0]?.id ?? ""
+}
+
 export async function prepareImport(
   job: ImportJob
 ): Promise<{ context: ImportContext; confirm: ConfirmInput }> {
@@ -202,9 +222,21 @@ export async function prepareImport(
 
   const prepared = parseStorage(content.storage)
   const api = new ImportApi(settings.cikiUrl, settings.importToken)
-  const parents = flattenParents(await api.parents())
+  const spaces = await api.spaces()
+  if (spaces.length === 0) {
+    throw new ImportError(
+      "SPACE_FORBIDDEN",
+      "导入令牌所属用户在 ciki 里没有可写入的空间",
+      {
+        title: "没有可写入的空间",
+        hint: "你在 ciki 里还没有 editor 及以上权限的空间；让空间管理员给你加权限后再剪藏。"
+      }
+    )
+  }
+  const spaceId = chooseSpaceId(settings.defaultSpaceId, spaces)
+  const parents = flattenParents(await api.parents(spaceId))
   const parentId = defaultParentId(settings, parents)
-  const conflict = await api.check(content.title, parentId)
+  const conflict = await api.check(content.title, parentId, spaceId)
 
   return {
     context: {
@@ -215,6 +247,7 @@ export async function prepareImport(
       prepared,
       api,
       pageId: job.probe.pageId,
+      spaces,
       parents,
       warnings
     },
@@ -222,6 +255,8 @@ export async function prepareImport(
       sourceTitle: content.title,
       sourceUrl: content.selfUrl,
       pageId: job.probe.pageId,
+      spaces,
+      defaultSpaceId: spaceId,
       parents,
       defaultParentId: parentId,
       conflict
@@ -229,12 +264,26 @@ export async function prepareImport(
   }
 }
 
+/**
+ * 切到另一个空间：父级树跟着重新拉，父级回到记住的那一项
+ * （记住的父级不在新空间时落顶层）。失败时调用方保持原空间，不动上下文。
+ */
+export async function selectSpace(
+  context: ImportContext,
+  spaceId: string
+): Promise<{ parents: ParentOption[]; parentId: string | null }> {
+  const parents = flattenParents(await context.api.parents(spaceId))
+  context.parents = parents
+  return { parents, parentId: defaultParentId(context.settings, parents) }
+}
+
 export async function checkConflict(
   context: ImportContext,
+  spaceId: string,
   title: string,
   parentId: string | null
 ): Promise<{ exists: boolean; pageId?: string }> {
-  return context.api.check(title, parentId)
+  return context.api.check(title, parentId, spaceId)
 }
 
 function cacheKey(filename: string): string {
@@ -375,6 +424,7 @@ export async function executeImport(
   onProgress({ step: "写入 ciki" })
   const created = await context.api.createPage({
     title: decision.title,
+    spaceId: decision.spaceId,
     parentId: decision.parentId,
     contentJson,
     conflict: decision.conflict
@@ -388,7 +438,11 @@ export async function executeImport(
 
   const parentTitle =
     context.parents.find((item) => item.id === decision.parentId)?.title ?? ""
+  const spaceName =
+    context.spaces.find((space) => space.id === decision.spaceId)?.name ?? ""
   await saveSettings({
+    defaultSpaceId: decision.spaceId,
+    defaultSpaceName: spaceName,
     defaultParentId: decision.parentId,
     defaultParentTitle: parentTitle
   })
@@ -421,6 +475,7 @@ export async function executeImport(
     sourceUrl: context.content.selfUrl,
     pageId: created.pageId,
     pageUrl,
+    spaceName,
     conflict: decision.conflict,
     images: {
       total: context.prepared.refs.length,
