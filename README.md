@@ -1,4 +1,4 @@
-# Ciki助手（Chrome MV3 插件）
+# Ciki助手
 
 在源文档页一键剪藏到 Ciki：借浏览器当前的登录态读取正文与附件原图，在插件里转成 ciki 的
 TipTap 结构，经你在确认小窗里点头后才写入。另含 ciki 编辑页的「粘贴补抓」：正文里标黄的
@@ -66,4 +66,4 @@ pnpm fixture        # 本地夹具服务，供开发联调
 
 ## 许可证
 
-MIT，详见 [LICENSE](LICENSE)。
+[MIT](LICENSE)
