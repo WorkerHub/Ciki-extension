@@ -27,6 +27,8 @@ export interface ImageRef {
   filename: string
   /** 仅 external：原始图片地址。 */
   url?: string
+  /** 仅 attachment：`ri:attachment` 里 `<ri:page>` 指到的页面（引用别页附件时才有）。 */
+  pageId?: string
   alt: string
 }
 
@@ -39,7 +41,7 @@ export interface PreparedStorage {
   blocks: string[]
 }
 
-export type ImageStatus = "uploaded" | "external" | "failed" | "skipped"
+export type ImageStatus = "uploaded" | "failed" | "skipped"
 
 export interface ImageOutcome {
   status: ImageStatus
@@ -349,7 +351,11 @@ export function parseStorage(storage: string): PreparedStorage {
       ).trim()
       if (attachment) {
         const filename = attachment.getAttribute("ri:filename") || ""
-        annotate(element, { kind: "attachment", filename, alt })
+        // 引用别页附件时 ri:attachment 里会带 `<ri:page ri:content-id>`：
+        // 附件清单是按本页查的，匹配落空后要靠这个 id 合成下载地址。
+        const page = childByTag(attachment, "ri:page")
+        const pageId = page?.getAttribute("ri:content-id") || undefined
+        annotate(element, { kind: "attachment", filename, alt, pageId })
       } else if (external) {
         const url = external.getAttribute("ri:value") || ""
         annotate(element, {

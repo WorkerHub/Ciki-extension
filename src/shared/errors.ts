@@ -16,6 +16,7 @@ export type ImportErrorCode =
   | "BAD_RESPONSE"
   | "SPACE_FORBIDDEN"
   | "SPACE_MISMATCH"
+  | "HOST_PERMISSION"
   | "DEFAULT_SPACE_MISSING"
   | "UNEXPECTED"
 
@@ -32,6 +33,7 @@ const TITLES: Record<ImportErrorCode, string> = {
   BAD_RESPONSE: "接口返回的结构对不上",
   SPACE_FORBIDDEN: "没有这个空间的写入权限",
   SPACE_MISMATCH: "父页不在所选空间",
+  HOST_PERMISSION: "没有读取这个域名的权限",
   DEFAULT_SPACE_MISSING: "ciki 还没完成数据库升级",
   UNEXPECTED: "没预料到的错误"
 }
@@ -49,6 +51,8 @@ const HINTS: Record<ImportErrorCode, string> = {
   BAD_RESPONSE: "ciki 的导入接口返回了预期之外的字段，请把这条报给维护者。",
   SPACE_FORBIDDEN: "换一个空间，或让空间管理员把你的角色改成 editor 及以上。",
   SPACE_MISMATCH: "关掉弹窗重新剪藏一次，让空间与父级重新读一遍。",
+  HOST_PERMISSION:
+    "重新剪藏这一页并在授权弹窗里点「允许」；只读这一次要用的站外图域名，不会给整站权限。",
   DEFAULT_SPACE_MISSING:
     "让管理员在 ciki 的「系统管理 → 数据库维护」里做一次升级，然后重新剪藏。",
   UNEXPECTED: "把这条报给维护者，附上截图与时间。"

@@ -156,6 +156,16 @@ export function Confirm() {
   const start = async () => {
     const context = contextRef.current
     if (!context || !title.trim() || !spaceId) return
+    // 站外图的域名权限只能从用户手势里申请：它必须是这个点击后的第一个 await，
+    // 中间不能插别的异步调用（与设置页 persist() 同一个写法）。
+    const patterns = confirm?.externalImages.patterns ?? []
+    if (patterns.length) {
+      try {
+        await chrome.permissions.request({ origins: patterns })
+      } catch {
+        // 拒绝或申请失败都继续：图逐张落失败原因，不阻断整页
+      }
+    }
     setPhase("running")
     setProgress([])
     try {
@@ -330,6 +340,12 @@ export function Confirm() {
                         </p>
                       </div>
                     </>
+                  ) : null}
+
+                  {confirm.externalImages.patterns.length ? (
+                    <p className="text-xs text-muted-foreground">
+                      {`本次含 ${confirm.externalImages.count} 张站外图（${confirm.externalImages.hosts.join("、")}），开始剪藏时会请你授权读取这些域名。`}
+                    </p>
                   ) : null}
 
                   <Button
