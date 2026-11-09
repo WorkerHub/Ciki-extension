@@ -1,7 +1,13 @@
 /**
- * storage 正文夹具 —— 全部是虚构示例，不含任何真实文档或真实域名。
+ * storage 正文夹具 —— 除 REAL_COLOR_STORAGE 外全部是虚构示例，不含任何真实文档或真实域名。
  * 覆盖：代码宏（CDATA 含 < > &）、面板宏、表格合并与 colgroup、任务列表、
  * 嵌套列表、附件图 / 外链图 / drawio、导航宏、status 行内宏、expand 宏、页面链接。
+ *
+ * REAL_COLOR_STORAGE 是用户 2026-11-09 提供的 Confluence 页面 body.storage 原文：
+ * 标签、属性与 style 值逐字保留，可见正文换成中性占位（不带真实文档内容）。
+ * 用它把「真实页面剪藏不丢颜色」钉在真实形态上：全篇 12 处内联色，其中 11 处在
+ * 文字上（红 rgb(255,0,0)、橙 rgb(255,153,0)、灰 rgb(51,51,51)），第 12 处
+ * rgb(255,204,0) 包着一张图。
  */
 
 export const SAMPLE_STORAGE = `
@@ -125,3 +131,7 @@ export const COLOR_STORAGE = `
   </tbody>
 </table>
 `
+
+// 真实样本（body.storage 原文，正文换中性占位）：单行排布与原文一致，
+// 这样标签之间的空白文本节点、&nbsp; 与 style 值都原样进管线。
+export const REAL_COLOR_STORAGE = `<p><ac:image ac:width="666"><ri:attachment ri:filename="image2025-3-9_1-2-19.png" /></ac:image></p><p>占位说明一：这一行是图表下方的说明文字。</p><p><strong>占位标题甲</strong><strong>&nbsp;</strong><strong>占位标题乙</strong><strong>&nbsp;</strong><strong>占位标题丙</strong></p><p style="margin-left: 30.0px;"><strong>占位词</strong><strong>&nbsp;</strong><strong>占位标签：</strong>占位正文一<span style="color: rgb(255,0,0);"><strong>占位红字</strong></span>占位正文二<strong>占位加粗一</strong>占位正文三<span style="color: rgb(255,153,0);">占位橙字一</span></p><p style="margin-left: 30.0px;"><strong>占位词</strong><strong>&nbsp;</strong><strong>占位标签：</strong>占位正文四<span style="color: rgb(51,51,51);"><strong>占位灰字加粗一</strong>占位灰字段一<strong>占位灰字加粗二</strong>占位灰字段二</span>占位正文五<span style="color: rgb(51,51,51);">占位灰字段三</span>占位正文六<span style="color: rgb(255,153,0);">占位橙字二</span></p><p style="margin-left: 30.0px;"><strong>占位标签：</strong>占位正文七<strong>占位代码一</strong>占位正文八<strong>占位代码二</strong>占位正文九<span style="color: rgb(255,153,0);">占位橙字三</span></p><p style="margin-left: 30.0px;"><strong>占位标签：</strong>占位正文十<span style="color: rgb(255,153,0);">占位橙字四</span></p><p><strong>占位标题丁</strong><strong>&nbsp;</strong><strong>占位标题戊</strong></p><p style="margin-left: 30.0px;"><strong>占位正文十一</strong><span style="color: rgb(255,153,0);">占位橙字五</span></p><p><strong>占位标题己</strong></p><p style="margin-left: 30.0px;">占位正文十二</p><p style="margin-left: 30.0px;"><strong>占</strong><strong>位标签：</strong>占位正文十三</p><p style="margin-left: 30.0px;"><strong>占</strong><strong>位标签：</strong>占位正文十四<span style="color: rgb(255,153,0);">占位橙字六</span></p><p style="margin-left: 30.0px;"><strong>占位标签：</strong>占位正文十五</p><p style="margin-left: 30.0px;"><strong>占位标签：</strong>占位正文十六<span style="color: rgb(255,153,0);">占位橙字七</span></p><p style="margin-left: 30.0px;"><strong>占位词甲</strong><strong>：</strong>占位正文十七<span style="color: rgb(255,153,0);">占位橙字八</span></p><p style="margin-left: 30.0px;"><span style="color: rgb(255,204,0);"><ac:image ac:width="555"><ri:attachment ri:filename="image2025-6-23_14-50-36.png" /></ac:image></span></p><p><strong>占位标题庚</strong></p><p style="margin-left: 30.0px;">占位正文十八</p><p style="margin-left: 30.0px;"><ac:image ac:width="666"><ri:attachment ri:filename="image2025-6-23_15-9-55.png" /></ac:image></p><p>占位说明二：原文此处有一对中文引号 &ldquo;占位&rdquo;。</p>`
