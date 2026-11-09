@@ -202,7 +202,7 @@ export function chooseSpaceId(
 
 /**
  * 站外图要用的域名权限：只挑第三方 origin，按 origin 去重。
- * 与源站 / ciki 同源的图走的是已有的会话链路，不需要额外授权。
+ * 与源站 / ciki 同源的图走的是已有的会话链路，不需要额外授权，也不计入这个张数。
  */
 function externalImageAccess(
   settings: Settings,
@@ -213,7 +213,6 @@ function externalImageAccess(
   let count = 0
   for (const ref of refs) {
     if (ref.kind !== "external") continue
-    count += 1
     const url = (ref.url ?? "").trim()
     if (!/^https?:\/\//i.test(url)) continue
     if (
@@ -222,11 +221,14 @@ function externalImageAccess(
     ) {
       continue
     }
+    count += 1
     const pattern = permissionPattern(url)
     if (!pattern || patterns.includes(pattern)) continue
     patterns.push(pattern)
     try {
-      hosts.push(new URL(url).host)
+      // 同一个域名可能既有 http 又有 https：授权 pattern 分两条，展示只写一次
+      const host = new URL(url).host
+      if (!hosts.includes(host)) hosts.push(host)
     } catch {
       // permissionPattern 已校验过地址，这里不会失败
     }
@@ -521,11 +523,17 @@ async function uploadByAddress(
   }
 }
 
-/** 缓存键按来源区分：两个站点同名的 image.png 不能串成同一张。 */
-function cacheKeyFor(ref: ImageRef): string {
+/**
+ * 缓存键按来源区分：站外图按 URL，附件按「页面 + 文件名」，drawio 单独一族。
+ * 否则别页与本页同名的 banner.png、或同名的 drawio 图会命中彼此的缓存。
+ */
+export function cacheKeyFor(ref: ImageRef): string {
   if (ref.kind === "external") return ref.url ? `url:${ref.url}` : ""
   const filename = ref.filename.trim().toLowerCase()
-  return filename ? `file:${filename}` : ""
+  if (!filename) return ""
+  if (ref.kind === "drawio") return `drawio:${filename}`
+  const scope = ref.pageId ? `page:${ref.pageId}:` : ""
+  return `file:${scope}${filename}`
 }
 
 /**

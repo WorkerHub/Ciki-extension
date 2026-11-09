@@ -3,11 +3,13 @@ import { resolve } from "node:path"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { ConfluenceQueue, summarizeQueue } from "@/background/confluence-queue"
 import { ImportApi } from "@/ciki/api"
+import type { ImageRef } from "@/convert/storage"
 import { arrayBufferToDataUrl } from "@/shared/bytes"
 import type { Reply, RequestMessage } from "@/shared/messages"
 import { loadSettings, saveSettings } from "@/shared/settings"
 import type { ImportJob } from "./import"
 import {
+  cacheKeyFor,
   checkConflict,
   chooseSpaceId,
   executeImport,
@@ -183,6 +185,7 @@ beforeAll(async () => {
   })
   await waitFor(`${CONFLUENCE}/__log`)
   await waitFor(`${CIKI}/__log`)
+  await waitFor(`${EXTERNAL}/__log`)
   queue = installChromeStub()
   await saveSettings({
     confluenceUrl: CONFLUENCE,
@@ -314,6 +317,47 @@ describe("整页搬运动编（夹具 HTTP，不 mock 接口）", () => {
     })
     await saveSettings({ importToken: TOKEN })
   }, 30_000)
+})
+
+describe("图片缓存键", () => {
+  const ref = (patch: Partial<ImageRef>): ImageRef => ({
+    index: 0,
+    kind: "attachment",
+    filename: "banner.png",
+    alt: "",
+    ...patch
+  })
+
+  it("别页与本页的同名附件不共用缓存", () => {
+    expect(cacheKeyFor(ref({ pageId: "111" }))).not.toBe(
+      cacheKeyFor(ref({ pageId: "222" }))
+    )
+    expect(cacheKeyFor(ref({ pageId: "111" }))).not.toBe(cacheKeyFor(ref({})))
+  })
+
+  it("drawio 图名不与同名附件、站外图混用一条缓存", () => {
+    const keys = new Set([
+      cacheKeyFor(ref({ kind: "attachment" })),
+      cacheKeyFor(ref({ kind: "drawio" })),
+      cacheKeyFor(
+        ref({ kind: "external", url: "https://cdn.example.com/banner.png" })
+      )
+    ])
+    expect(keys.size).toBe(3)
+  })
+
+  it("站外图按 URL 区分，同 URL 才复用（含同名不同站）", () => {
+    expect(
+      cacheKeyFor(ref({ kind: "external", url: "https://a.example.com/x.png" }))
+    ).toBe(
+      cacheKeyFor(ref({ kind: "external", url: "https://a.example.com/x.png" }))
+    )
+    expect(
+      cacheKeyFor(ref({ kind: "external", url: "https://a.example.com/x.png" }))
+    ).not.toBe(
+      cacheKeyFor(ref({ kind: "external", url: "https://b.example.com/x.png" }))
+    )
+  })
 })
 
 describe("空间落点（夹具 HTTP，不 mock 接口）", () => {
