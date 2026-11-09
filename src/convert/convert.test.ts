@@ -3,6 +3,7 @@ import {
   COLOR_STORAGE,
   IMAGE_STORAGE,
   PLAIN_STORAGE,
+  REAL_COLOR_STORAGE,
   SAMPLE_STORAGE
 } from "@/test/fixtures/storage"
 import { cleanConfluenceHtml } from "./cleaner"
@@ -50,6 +51,20 @@ function nodesOfType(node: unknown, type: string): any[] {
 function textOfNode(node: any): string {
   if (typeof node.text === "string") return node.text
   return (node.content ?? []).map(textOfNode).join("")
+}
+
+/** 取某段文字的 marks（找不到返回空数组）。 */
+function marksOfText(node: unknown, text: string): any[] {
+  const found: any[] = []
+  const visit = (current: any) => {
+    if (!current || typeof current !== "object") return
+    if (current.type === "text" && current.text === text) {
+      found.push(current.marks ?? [])
+    }
+    for (const child of current.content ?? []) visit(child)
+  }
+  visit(node)
+  return found
 }
 
 const UPLOADED = "/api/files/0f3c1a2b-4d5e-4f60-8a9b-0c1d2e3f4a5b.png"
@@ -303,20 +318,6 @@ describe("边角", () => {
 describe("颜色：storage 内联样式 → 契约 JSON", () => {
   const { doc, cleaned } = convert(COLOR_STORAGE)
 
-  /** 取某段文字的 marks（找不到返回空数组）。 */
-  function marksOfText(node: unknown, text: string): any[] {
-    const found: any[] = []
-    const visit = (current: any) => {
-      if (!current || typeof current !== "object") return
-      if (current.type === "text" && current.text === text) {
-        found.push(current.marks ?? [])
-      }
-      for (const child of current.content ?? []) visit(child)
-    }
-    visit(node)
-    return found
-  }
-
   it("文字颜色：rgb() 归一成 #rrggbb 的 textStyle mark", () => {
     expect(marksOfText(doc, "红色警告")[0]).toEqual([
       { type: "textStyle", attrs: { color: "#de350b" } }
@@ -420,5 +421,48 @@ describe("颜色：storage 内联样式 → 契约 JSON", () => {
     visit(doc)
     expect([...markTypes].sort()).toEqual(["highlight", "textStyle"])
     expect([...attrKeys].sort()).toEqual(["highlight.color", "textStyle.color"])
+  })
+})
+
+/**
+ * 真实样本回归 —— 用户 2026-11-09 提供的那页 Confluence body.storage（正文换中性占位，
+ * 标签与 style 值逐字保留）。发布过的 v1.0.0 包里没有颜色能力，整页颜色被剥掉；
+ * 这条断言把「真实形态 11 处文字颜色一处不少」钉死，防止以后回退。
+ */
+describe("真实样本：整页剪藏不丢颜色", () => {
+  const { cleaned, doc } = convert(REAL_COLOR_STORAGE)
+
+  it("红字落成 span[data-text-color=#ff0000]，内部的加粗也还在", () => {
+    expect(cleaned).toContain(
+      '<span data-text-color="#ff0000"><strong>占位红字</strong></span>'
+    )
+  })
+
+  it("红字的 marks 是颜色 + 加粗", () => {
+    expect(marksOfText(doc, "占位红字")[0]).toEqual([
+      { type: "textStyle", attrs: { color: "#ff0000" } },
+      { type: "bold" }
+    ])
+  })
+
+  it("全篇 data-text-color 恰好 11 次", () => {
+    expect(cleaned.match(/data-text-color/g) ?? []).toHaveLength(11)
+  })
+
+  it("橙字与灰字按真实色值落库", () => {
+    expect(marksOfText(doc, "占位橙字一")[0]).toEqual([
+      { type: "textStyle", attrs: { color: "#ff9900" } }
+    ])
+    expect(marksOfText(doc, "占位灰字段三")[0]).toEqual([
+      { type: "textStyle", attrs: { color: "#333333" } }
+    ])
+  })
+
+  it("第 12 处颜色（rgb(255,204,0)）包的是图，不落成文字颜色", () => {
+    expect(cleaned).not.toContain('data-text-color="#ffcc00"')
+  })
+
+  it("除颜色载具外没有内联样式残留", () => {
+    expect(cleaned).not.toMatch(/\sstyle=/)
   })
 })
