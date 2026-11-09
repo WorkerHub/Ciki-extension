@@ -35,7 +35,7 @@ function createButton(onStart: () => void): HTMLButtonElement {
   button.id = BUTTON_ID
   button.type = "button"
   button.textContent = "剪藏到 Ciki"
-  button.title = "把这一页整页剪藏到 Ciki（逐页手动，不做批量）"
+  button.title = "把这一页整页剪藏到 Ciki"
   button.setAttribute("style", BUTTON_STYLE)
   button.addEventListener("click", (event) => {
     event.preventDefault()
