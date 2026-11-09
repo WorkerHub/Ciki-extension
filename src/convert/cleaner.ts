@@ -66,7 +66,7 @@ const PANEL_LABELS: { match: string; label: string }[] = [
   { match: "error", label: "⛔ 错误" }
 ]
 
-// 图片地址白名单与后端契约逐个字符对齐（见 lib/media.ts）
+// 图片地址白名单与后端契约逐个字符对齐（见 ./media.ts）
 
 export function cleanConfluenceHtml(html: string): string {
   if (!html?.trim()) return ""
@@ -233,7 +233,7 @@ export function cleanConfluenceHtml(html: string): string {
   // 7) 颜色：只认内联 `color` 与 `background-color`，归一成 `#rrggbb` 后落到契约载具上
   // （span[data-text-color] / mark[data-color] / td,th[data-cell-bg]），其余内联样式
   // 照旧剥干净（整条 style 直接移除）。颜色不走 style 的原因见 schema.ts 的 WikiColor：
-  // 服务端消毒会剥掉 style，只有普通属性才能三路（编辑/粘贴/导入）一致。
+  // 服务端消毒会把 style 剥掉，只有普通属性才能三路（编辑/粘贴/导入）一致。
   const INLINE_TAGS = new Set([
     "SPAN",
     "FONT",

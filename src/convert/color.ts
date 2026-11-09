@@ -1,10 +1,10 @@
 // 移植自 Ciki 仓 web/src/lib/color.ts（颜色归一，与后端冻结契约逐字对齐），内容不变。
 /**
- * 颜色值的唯一形态 —— 与后端冻结契约（Ciki docs/api-contract.md「服务端消毒规则」）逐字对齐。
+ * 颜色值的唯一形态 —— 与后端冻结契约（docs/api-contract.md「服务端消毒规则」）逐字对齐。
  *
  * 全链路只认小写 `#rrggbb`：TipTap JSON 里存它，contentHtml 的 data 载具（data-text-color /
- * data-color / data-cell-bg）也存它。所以源页面把颜色写成 `rgb(222, 53, 11)`、`#DE350B`、
- * `#f00` 时都必须能归一回来，否则同一种颜色会以几种形态进库。
+ * data-color / data-cell-bg）也存它。所以浏览器把内联样式序列化成 `rgb(222, 53, 11)`
+ * 之后必须能再归一回来，否则「粘贴一次 → 存一次」就会把颜色值写成本地化后的形态。
  * 归一不出来的写法（var(--x)、命名色、半透明、oklch()…）一律丢弃，不猜。
  */
 
