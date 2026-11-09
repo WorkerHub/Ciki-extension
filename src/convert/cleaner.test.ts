@@ -163,6 +163,14 @@ describe("图片地址：本站图床保留、危险地址丢弃", () => {
     expect(cleaned).not.toContain("data-original-src")
   })
 
+  it("带类别前缀的本站图床地址（imports/、pages/）也原样保留", () => {
+    for (const prefix of ["imports", "pages"]) {
+      const cleaned = img(`/api/files/${prefix}/${UUID}.png`)
+      expect(cleaned).toContain(`src="/api/files/${prefix}/${UUID}.png"`)
+      expect(cleaned).not.toContain("data-original-src")
+    }
+  })
+
   it("合规内联图（png base64）保留", () => {
     const cleaned = img("data:image/png;base64,iVBORw0KGgo=")
     expect(cleaned).toContain('src="data:image/png;base64,iVBORw0KGgo="')
@@ -198,6 +206,10 @@ describe("图片地址：本站图床保留、危险地址丢弃", () => {
     // 自身 src 必须消失；根相对地址仍然可以作为「原地址」保留
     expect(cleaned).not.toMatch(/<img[^>]*\ssrc=/)
     expect(cleaned).toContain('data-confluence-img="true"')
+    // 头像只服务资料页、不进正文：正本白名单里没有 avatars/
+    const avatar = img(`/api/files/avatars/${UUID}.png`)
+    expect(avatar).not.toMatch(/<img[^>]*\ssrc=/)
+    expect(avatar).toContain('data-confluence-img="true"')
   })
 })
 

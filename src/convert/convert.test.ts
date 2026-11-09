@@ -68,6 +68,9 @@ function marksOfText(node: unknown, text: string): any[] {
 }
 
 const UPLOADED = "/api/files/0f3c1a2b-4d5e-4f60-8a9b-0c1d2e3f4a5b.png"
+/** 转存走 imports 类别：真实 ciki 现在回的就是带前缀的地址。 */
+const UPLOADED_IMPORTED =
+  "/api/files/imports/0f3c1a2b-4d5e-4f60-8a9b-0c1d2e3f4a5b.png"
 
 describe("code 宏（CDATA）", () => {
   const { doc, cleaned } = convert(SAMPLE_STORAGE)
@@ -170,6 +173,25 @@ describe("图片引用", () => {
     })
     const image = nodesOfType(doc, "image")[0]
     expect(image.attrs.src).toBe(UPLOADED)
+    expect(image.attrs.confluenceImg).toBe(false)
+  })
+
+  it("图床地址带 imports/ 类别前缀时照样回填", () => {
+    const { doc } = convert(SAMPLE_STORAGE, {
+      outcomes: [
+        [
+          1,
+          {
+            status: "uploaded",
+            url: UPLOADED_IMPORTED,
+            filename: "arch.png"
+          }
+        ]
+      ]
+    })
+    const image = nodesOfType(doc, "image")[0]
+    expect(image.attrs.src).toBe(UPLOADED_IMPORTED)
+    expect(image.attrs.originalSrc).toBeNull()
     expect(image.attrs.confluenceImg).toBe(false)
   })
 
