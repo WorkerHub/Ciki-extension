@@ -195,9 +195,19 @@ describe("图片引用", () => {
     expect(image.attrs.confluenceImg).toBe(false)
   })
 
-  it("外链图保留原地址并打未转存标记", () => {
+  it("站外图下载失败时保留原地址并打未转存标记", () => {
     const { doc } = convert(SAMPLE_STORAGE, {
-      outcomes: [[2, { status: "external" }]]
+      outcomes: [
+        [
+          2,
+          {
+            status: "failed",
+            filename: "flow.png",
+            downloadUrl: "https://example.com/pic/flow.png",
+            reason: "HTTP 403（多半是防盗链或需要登录）"
+          }
+        ]
+      ]
     })
     const image = nodesOfType(doc, "image").find(
       (item) => item.attrs?.originalSrc

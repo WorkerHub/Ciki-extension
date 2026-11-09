@@ -19,7 +19,6 @@ export interface ImportReport {
   images: {
     total: number
     uploaded: number
-    external: number
     failed: FailedImage[]
   }
   attachmentLinks: { filename: string; url: string }[]
@@ -35,8 +34,7 @@ export function reportLines(report: ImportReport): string[] {
   const images = report.images
   lines.push(
     `图片 ${images.total} 张：转存 ${images.uploaded} 张` +
-      (images.failed.length ? `，未转存 ${images.failed.length} 张` : "") +
-      (images.external ? `，外链图 ${images.external} 张（保留原地址）` : "")
+      (images.failed.length ? `，未转存 ${images.failed.length} 张` : "")
   )
   for (const failure of images.failed) {
     lines.push(`· 未转存：${failure.filename || "未命名"}（${failure.reason}）`)

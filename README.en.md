@@ -15,6 +15,11 @@ Chinese; the original labels are included in parentheses below.
 
 - **Full-page clipping**: title, body, code blocks, tables, task lists, callout panels and original
   attachment images are imported together.
+- **Off-site images are stored too**: images that point at third-party sites (`ri:url`) are
+  downloaded from their original URL and uploaded to the image store instead of being left as hot
+  links. The first time a new image domain shows up, the browser asks you to grant access to it
+  (only the domains used by this page); if you decline, that image keeps its original URL with the
+  reason in the completion report, and the rest of the page is imported as usual.
 - **Colors come along**: text colors, highlights and table cell backgrounds are imported too. Ciki
   only accepts `#rrggbb`-style values, so named and semi-transparent colors fall back to plain
   text.
@@ -65,6 +70,10 @@ at any time from the extension details page in `chrome://extensions/`.
 
 "Save and test" really calls the source site's read-only API and Ciki's import API; configuration
 is complete only when both succeed.
+
+Off-site images need an extra domain permission: when the body contains off-site images, clicking
+"开始剪藏" (Start clipping) asks once for the image domains used by that page. Once granted, it is
+not asked again.
 
 ## Usage
 

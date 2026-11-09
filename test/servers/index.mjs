@@ -1,11 +1,14 @@
 /**
  * 本地夹具实例 —— 只给手测与联调用，**不是**真实 Confluence / ciki。
  *
- * 两个服务：
+ * 三个服务：
  * - :8811 假 Confluence：内容页（带 meta ajs-page-id）、REST 正文、附件清单、附件原图；
  * - :8812 假 ciki：五个导入接口（Bearer 令牌）、图床回读、补抓桥的测试页。
  *   `/api/import/spaces` 固定回两项：默认空间在前的 `space-default` 与 `space-dev`，
- *   其它空间 id 一律 403 SPACE_FORBIDDEN；`/__imports` 把收到的导入调用攒着给测试核对落点。
+ *   其它空间 id 一律 403 SPACE_FORBIDDEN；`/__imports` 把收到的导入调用攒着给测试核对落点，
+ *   `/__page-content` 给最后一次写入页的 contentJson（核对正文里图片的落点）。
+ * - :8813 假图床（与源站跨源）：正文里的站外图从这里取，验「按原地址下载 → 转存」，
+ *   以及防盗链 403、回登录页、慢响应这几类单张失败。
  *
  * 所有请求都带时间戳记在内存里，`GET /__log` 取出来就能核对「串行 + 间隔 ≥1000ms」。
  * 报告与 README 里必须写清楚：这组数字来自夹具，真实例由 QA 在真页上验。
@@ -17,8 +20,11 @@ import { createServer } from "node:http"
 
 const CONFLUENCE_PORT = Number(process.env.CONFLUENCE_PORT || 8811)
 const CIKI_PORT = Number(process.env.CIKI_PORT || 8812)
+const EXTERNAL_PORT = Number(process.env.EXTERNAL_PORT || 8813)
 const TOKEN = process.env.FIXTURE_TOKEN || "fixture-token"
 const PAGE_ID = "63444152"
+/** 站外图床的 origin：端口不同就是跨源，正文里的 `ri:url` 走它。 */
+const EXTERNAL_ORIGIN = `http://127.0.0.1:${EXTERNAL_PORT}`
 
 const ICON = readFileSync(
   new URL("../../public/icons/icon-48.png", import.meta.url)
@@ -53,7 +59,8 @@ const STORAGE = `<h1>支付服务部署手册</h1>
 <ac:structured-macro ac:name="warning"><ac:rich-text-body><p>生产部署必须双人复核。</p></ac:rich-text-body></ac:structured-macro>
 <ac:structured-macro ac:name="toc"><ac:parameter ac:name="maxLevel">3</ac:parameter></ac:structured-macro>
 <p><ac:image ac:alt="架构图"><ri:attachment ri:filename="arch.png" /></ac:image></p>
-<p><ac:image ac:alt="外链图"><ri:url ri:value="https://example.com/pic/flow.png" /></ac:image></p>
+<p><ac:image ac:alt="外链图"><ri:url ri:value="${EXTERNAL_ORIGIN}/pic/flow.png" /></ac:image></p>
+<p><ac:image ac:alt="防盗链图"><ri:url ri:value="${EXTERNAL_ORIGIN}/pic/blocked.png" /></ac:image></p>
 <p>参考资料：<ac:link><ri:page ri:content-id="1" /><ac:plain-text-link-body><![CDATA[支付服务概览]]></ac:plain-text-link-body></ac:link></p>
 `
 
@@ -211,6 +218,8 @@ const PARENTS_BY_SPACE = {
 }
 /** 本次进程里收到的导入调用（供测试核对落点，不透出 contentJson）。 */
 const imports = []
+/** 最后一次写入页的标题与 contentJson（供测试核对图片落点）。 */
+let lastPage = null
 
 /** 缺省与空串都落默认空间（与后端契约一致）；不认识的空间一律拒绝。 */
 function resolveSpace(value) {
@@ -257,10 +266,13 @@ const ciki = createServer(async (req, res) => {
   if (url.pathname === "/__log")
     return sendJson(res, 200, JSON.parse(log.json()))
   if (url.pathname === "/__imports") return sendJson(res, 200, imports)
+  if (url.pathname === "/__page-content")
+    return sendJson(res, 200, lastPage ?? {})
   if (url.pathname === "/__reset") {
     log.reset()
     pages.clear()
     imports.length = 0
+    lastPage = null
     return sendJson(res, 200, { ok: true })
   }
   if (url.pathname === "/__captured") {
@@ -344,6 +356,11 @@ const ciki = createServer(async (req, res) => {
     const id =
       existing && body.conflict === "update" ? existing.id : randomUUID()
     pages.set(key, { id, body })
+    lastPage = {
+      pageId: id,
+      title: body.title,
+      contentJson: body.contentJson
+    }
     console.log(
       `[fixture] import/pages space=${spaceId} conflict=${body.conflict} bytes=${body.contentJson.length} pageId=${id}`
     )
@@ -373,6 +390,55 @@ const ciki = createServer(async (req, res) => {
   res.end("not found")
 })
 
+/* --------------------------------- 假图床 --------------------------------- */
+
+const external = createServer((req, res) => {
+  const url = new URL(req.url, `http://127.0.0.1:${EXTERNAL_PORT}`)
+  log.push("external", url.pathname)
+
+  if (url.pathname === "/__log")
+    return sendJson(res, 200, JSON.parse(log.json()))
+
+  // 可以正常转存的一张
+  if (url.pathname === "/pic/flow.png") {
+    res.writeHead(200, {
+      "Content-Type": "image/png",
+      "Content-Length": ICON.length
+    })
+    return res.end(ICON)
+  }
+
+  // 防盗链：403 时插件应只算这张失败、正文保留原地址
+  if (url.pathname === "/pic/blocked.png") {
+    res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" })
+    return res.end("hotlink blocked")
+  }
+
+  // 登录失效：200 但回的是登录页（不是图片）
+  if (url.pathname === "/pic/login.png") {
+    return sendHtml(
+      res,
+      '<!doctype html><html><body><form id="login">请先登录</form></body></html>'
+    )
+  }
+
+  // 慢响应：给超时分支的手测用（测试里用短 timeoutMs 验）
+  if (url.pathname === "/pic/slow.png") {
+    setTimeout(() => {
+      if (res.writableEnded) return
+      res.writeHead(200, {
+        "Content-Type": "image/png",
+        "Content-Length": ICON.length
+      })
+      res.end(ICON)
+    }, 3000)
+    return
+  }
+
+  res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" })
+  res.end("not found")
+})
+
 confluence.listen(CONFLUENCE_PORT, "127.0.0.1", () => {
   console.log(`[fixture] 假 Confluence: http://127.0.0.1:${CONFLUENCE_PORT}/`)
 })
@@ -383,11 +449,15 @@ ciki.listen(CIKI_PORT, "127.0.0.1", () => {
   )
   console.log(`[fixture] 令牌: ${TOKEN}`)
 })
+external.listen(EXTERNAL_PORT, "127.0.0.1", () => {
+  console.log(`[fixture] 假图床（站外）: ${EXTERNAL_ORIGIN}/`)
+})
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => {
     confluence.close()
     ciki.close()
+    external.close()
     process.exit(0)
   })
 }

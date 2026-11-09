@@ -10,6 +10,7 @@ import {
   ConfluenceQueue,
   type QueueSnapshot
 } from "@/background/confluence-queue"
+import { fetchExternalBytes } from "@/background/external-image"
 import { installImageRelay, RELAY_CONFIG } from "@/content/relay"
 import { arrayBufferToDataUrl } from "@/shared/bytes"
 import { ImportError } from "@/shared/errors"
@@ -257,6 +258,8 @@ chrome.runtime.onMessage.addListener(
           return ok(await fetchJson(message.url))
         case "confluence:bytes":
           return ok(await fetchBytes(message.url))
+        case "image:bytes":
+          return ok(await fetchExternalBytes(message.url))
         case "bridge:fetch":
           return ok(await fetchBytes(message.src))
         case "bridge:install": {

@@ -21,8 +21,11 @@ import {
  */
 const CONFLUENCE_PORT = 8891
 const CIKI_PORT = 8892
+const EXTERNAL_PORT = 8893
 const CONFLUENCE = `http://127.0.0.1:${CONFLUENCE_PORT}`
 const CIKI = `http://127.0.0.1:${CIKI_PORT}`
+/** 站外图床（与源站跨源）：正文里的 ri:url 走它。 */
+const EXTERNAL = `http://127.0.0.1:${EXTERNAL_PORT}`
 const PAGE_ID = "63444152"
 const TOKEN = "fixture-token"
 
@@ -73,6 +76,42 @@ function installChromeStub() {
         headers: { Accept: "application/json" }
       })
       return { ok: true, data: { json: await response.json() } }
+    }
+    if (message.type === "image:bytes") {
+      // 站外图床：与生产同口径——直接 fetch，不带会话，也不进 Confluence 队列
+      let response: Response
+      try {
+        response = await fetch(message.url)
+      } catch (error) {
+        return {
+          ok: false,
+          code: "NETWORK",
+          message: error instanceof Error ? error.message : String(error),
+          hint: "",
+          stop: false
+        }
+      }
+      if (!response.ok) {
+        return {
+          ok: false,
+          code: "HTTP",
+          message: `HTTP ${response.status}`,
+          hint: "",
+          stop: false,
+          status: response.status
+        }
+      }
+      const buffer = await response.arrayBuffer()
+      const contentType = response.headers.get("content-type") || ""
+      return {
+        ok: true,
+        data: {
+          dataUrl: arrayBufferToDataUrl(buffer, contentType),
+          contentType,
+          filename: new URL(message.url).pathname.split("/").pop() || "",
+          byteLength: buffer.byteLength
+        }
+      }
     }
     if (
       message.type === "confluence:bytes" ||
@@ -137,6 +176,7 @@ beforeAll(async () => {
       ...process.env,
       CONFLUENCE_PORT: String(CONFLUENCE_PORT),
       CIKI_PORT: String(CIKI_PORT),
+      EXTERNAL_PORT: String(EXTERNAL_PORT),
       FIXTURE_TOKEN: TOKEN
     },
     stdio: "ignore"
@@ -167,7 +207,13 @@ describe("整页搬运动编（夹具 HTTP，不 mock 接口）", () => {
       "p-backend"
     ])
     expect(prepared.confirm.conflict.exists).toBe(false)
-    expect(prepared.context.prepared.refs).toHaveLength(2)
+    expect(prepared.context.prepared.refs).toHaveLength(3)
+    // 站外图需要一个站点外的域名权限：确认小窗要能把它拿出来申请
+    expect(prepared.confirm.externalImages).toMatchObject({
+      count: 2,
+      patterns: [`${EXTERNAL}/*`],
+      hosts: [`127.0.0.1:${EXTERNAL_PORT}`]
+    })
   })
 
   it("跑完整流程：图片转存、非图片附件留链接、导航宏丢弃、节流达标", async () => {
@@ -188,13 +234,28 @@ describe("整页搬运动编（夹具 HTTP，不 mock 接口）", () => {
     // 接口回的是根相对路径 /p/<id>：报告与「在 ciki 打开」都要补成绝对地址
     expect(result.url).toBe(`${CIKI}/p/${result.pageId}`)
     expect(result.report.pageUrl).toBe(`${CIKI}/p/${result.pageId}`)
-    expect(result.report.images.uploaded).toBe(1)
-    expect(result.report.images.failed).toHaveLength(0)
-    expect(result.report.images.external).toBe(1)
+    // 附件图 + 能下载的站外图都转存；防盗链那张只算自己失败
+    expect(result.report.images.uploaded).toBe(2)
+    expect(result.report.images.failed).toHaveLength(1)
+    expect(result.report.images.failed[0]).toMatchObject({
+      filename: "blocked.png",
+      downloadUrl: `${EXTERNAL}/pic/blocked.png`
+    })
+    expect(result.report.images.failed[0].reason).toContain("403")
     expect(result.report.droppedMacros).toEqual(["toc"])
     expect(result.report.attachmentLinks.map((link) => link.filename)).toEqual(
       []
     )
+
+    // 正文落点：成功的图回填图床地址，失败的那张保留原地址
+    const content = (await (await fetch(`${CIKI}/__page-content`)).json()) as {
+      title: string
+      contentJson: string
+    }
+    expect(content.title).toBe("支付服务部署手册")
+    expect(content.contentJson).toContain("/api/files/imports/")
+    expect(content.contentJson).toContain(`${EXTERNAL}/pic/blocked.png`)
+    expect(content.contentJson).not.toContain(`${EXTERNAL}/pic/flow.png`)
 
     // 节流：这次测试的队列记录里，相邻请求间隔 ≥1000ms
     const summary = summarizeQueue(queue.snapshot())
@@ -234,12 +295,12 @@ describe("整页搬运动编（夹具 HTTP，不 mock 接口）", () => {
       },
       () => undefined
     )
-    expect(missing.report.images.uploaded).toBe(0)
-    expect(missing.report.images.failed).toHaveLength(1)
-    expect(missing.report.images.failed[0]).toMatchObject({
-      filename: "arch.png"
-    })
-    expect(missing.report.images.failed[0].reason).toContain("404")
+    expect(missing.report.images.uploaded).toBe(1)
+    expect(missing.report.images.failed).toHaveLength(2)
+    const missingImage = missing.report.images.failed.find(
+      (item) => item.filename === "arch.png"
+    )
+    expect(missingImage?.reason).toContain("404")
     await fetch(`${CONFLUENCE}/__mode`, {
       method: "POST",
       body: JSON.stringify({ missingImage: false })

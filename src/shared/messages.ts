@@ -27,6 +27,8 @@ export type RequestMessage =
   | { type: "run:prepare"; tabId?: number; probe?: PageProbe }
   | { type: "confluence:json"; url: string }
   | { type: "confluence:bytes"; url: string }
+  /** 站外图床的字节下载：不带浏览器会话，只认用户为该域名授予的可选权限。 */
+  | { type: "image:bytes"; url: string }
   | { type: "queue:stats" }
   | { type: "bridge:install" }
   | { type: "bridge:fetch"; src: string }

@@ -18,7 +18,11 @@ import {
   type ImportSpace
 } from "@/ciki/api"
 import { indexAttachments, matchAttachment } from "@/confluence/attachments"
-import type { Attachment, ConfluenceContent } from "@/confluence/client"
+import type {
+  Attachment,
+  ConfluenceContent,
+  DownloadedImage
+} from "@/confluence/client"
 import {
   downloadImage,
   loadAttachments,
@@ -29,6 +33,7 @@ import { isHostedImageSrc } from "@/convert/media"
 import { htmlToTiptapDoc } from "@/convert/schema"
 import {
   type ImageOutcome,
+  type ImageRef,
   type PreparedStorage,
   parseStorage,
   renderStorage
@@ -46,8 +51,10 @@ import { sendMessage } from "@/shared/messages"
 import {
   baseCandidates,
   isConfigured,
+  isSameOrigin,
   loadSettings,
   originOf,
+  permissionPattern,
   type Settings,
   saveSettings
 } from "@/shared/settings"
@@ -78,6 +85,8 @@ export interface ConfirmInput {
   parents: ParentOption[]
   defaultParentId: string | null
   conflict: { exists: boolean; pageId?: string }
+  /** 正文里的站外图：确认小窗据此按需申请站外域名的可选权限。 */
+  externalImages: { count: number; patterns: string[]; hosts: string[] }
 }
 
 export interface ImportContext {
@@ -191,6 +200,40 @@ export function chooseSpaceId(
   return spaces[0]?.id ?? ""
 }
 
+/**
+ * 站外图要用的域名权限：只挑第三方 origin，按 origin 去重。
+ * 与源站 / ciki 同源的图走的是已有的会话链路，不需要额外授权。
+ */
+function externalImageAccess(
+  settings: Settings,
+  refs: ImageRef[]
+): ConfirmInput["externalImages"] {
+  const patterns: string[] = []
+  const hosts: string[] = []
+  let count = 0
+  for (const ref of refs) {
+    if (ref.kind !== "external") continue
+    count += 1
+    const url = (ref.url ?? "").trim()
+    if (!/^https?:\/\//i.test(url)) continue
+    if (
+      isSameOrigin(url, settings.confluenceUrl) ||
+      isSameOrigin(url, settings.cikiUrl)
+    ) {
+      continue
+    }
+    const pattern = permissionPattern(url)
+    if (!pattern || patterns.includes(pattern)) continue
+    patterns.push(pattern)
+    try {
+      hosts.push(new URL(url).host)
+    } catch {
+      // permissionPattern 已校验过地址，这里不会失败
+    }
+  }
+  return { count, patterns, hosts }
+}
+
 export async function prepareImport(
   job: ImportJob
 ): Promise<{ context: ImportContext; confirm: ConfirmInput }> {
@@ -259,7 +302,8 @@ export async function prepareImport(
       defaultSpaceId: spaceId,
       parents,
       defaultParentId: parentId,
-      conflict
+      conflict,
+      externalImages: externalImageAccess(settings, prepared.refs)
     }
   }
 }
@@ -286,8 +330,99 @@ export async function checkConflict(
   return context.api.check(title, parentId, spaceId)
 }
 
-function cacheKey(filename: string): string {
-  return filename.trim().toLowerCase()
+/** 一张图的下载地址与文件名；失败时正文里保留的原地址也是这个 url。 */
+interface ImageSource {
+  url: string
+  filename: string
+  /** 序号：URL 末段没有可用文件名时用 `external-<n>.<ext>` 兜底。 */
+  index: number
+  /** 仅附件：清单里的 mediaType，响应头给不出类型时的兜底。 */
+  mediaType?: string
+}
+
+const EXTENSION_BY_TYPE: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/gif": "gif",
+  "image/webp": "webp"
+}
+
+/** 上传用的文件名：URL 末段优先，没有可用扩展名时按 contentType 补一个。 */
+function uploadFilename(
+  source: ImageSource,
+  downloaded: DownloadedImage,
+  contentType: string
+): string {
+  const raw = (source.filename || downloaded.filename).trim()
+  if (/\.[a-z0-9]{1,5}$/i.test(raw)) return raw
+  const extension = EXTENSION_BY_TYPE[contentType] ?? "png"
+  return `${raw || `external-${source.index + 1}`}.${extension}`
+}
+
+/**
+ * 取原图字节。源站同源走后台的会话队列（带登录态、受 §12.4 节流与 stop 约束），
+ * 其余一律走站外图床出口（不带会话、按域名授权）。
+ */
+async function downloadSource(
+  context: ImportContext,
+  source: ImageSource
+): Promise<DownloadedImage> {
+  if (isSameOrigin(source.url, context.settings.confluenceUrl)) {
+    return downloadImage(source.url)
+  }
+  const reply = await sendMessage<DownloadedImage>({
+    type: "image:bytes",
+    url: source.url
+  })
+  if (!reply.ok) {
+    throw new ImportError(reply.code, reply.message, {
+      hint: reply.hint,
+      status: reply.status
+    })
+  }
+  return reply.data
+}
+
+/** 下载好的字节 → ciki 图床地址；附件与站外图共用这一尾部。 */
+async function uploadBlobOne(
+  context: ImportContext,
+  source: ImageSource,
+  downloaded: DownloadedImage
+): Promise<ImageOutcome> {
+  const { blob } = dataUrlToBlob(downloaded.dataUrl)
+  // 反代有时回 application/octet-stream：按附件元数据/文件名补上 ciki 认的类型，
+  // 否则上传被拒、图白抓一场。
+  const contentType = isAcceptedImageType(blob.type)
+    ? blob.type
+    : normalizeImageType(downloaded.contentType, source.filename) ||
+      normalizeImageType(source.mediaType, source.filename) ||
+      blob.type
+  if (!isAcceptedImageType(contentType)) {
+    return {
+      status: "failed",
+      filename: source.filename,
+      downloadUrl: source.url,
+      reason: `图片格式 ciki 不收（${contentType || "未知类型"}，只收 png/jpg/gif/webp）`
+    }
+  }
+  const filename = uploadFilename(source, downloaded, contentType)
+  const uploadBlob =
+    contentType !== blob.type ? new Blob([blob], { type: contentType }) : blob
+  const uploaded = await context.api.upload(uploadBlob, filename)
+  if (!isHostedImageSrc(uploaded.url)) {
+    return {
+      status: "failed",
+      filename,
+      downloadUrl: source.url,
+      reason: "ciki 返回的图床地址不符合契约（/api/files/…）"
+    }
+  }
+  return {
+    status: "uploaded",
+    url: uploaded.url,
+    filename,
+    downloadUrl: source.url
+  }
 }
 
 async function uploadOne(
@@ -311,34 +446,15 @@ async function uploadOne(
         : "不是图片附件，不转存"
     }
   }
+  const source: ImageSource = {
+    url: attachment.downloadUrl,
+    filename: attachment.filename,
+    index: -1,
+    mediaType: attachment.mediaType
+  }
   try {
-    const downloaded = await downloadImage(attachment.downloadUrl)
-    const { blob } = dataUrlToBlob(downloaded.dataUrl)
-    // 反代有时回 application/octet-stream：按附件元数据/文件名补上 ciki 认的类型，
-    // 否则上传被拒、图白抓一场。
-    const contentType = isAcceptedImageType(blob.type)
-      ? blob.type
-      : normalizeImageType(attachment.mediaType, attachment.filename) ||
-        blob.type
-    const uploadBlob =
-      contentType && contentType !== blob.type
-        ? new Blob([blob], { type: contentType })
-        : blob
-    const uploaded = await context.api.upload(uploadBlob, attachment.filename)
-    if (!isHostedImageSrc(uploaded.url)) {
-      return {
-        status: "failed",
-        filename: attachment.filename,
-        downloadUrl: attachment.downloadUrl,
-        reason: "ciki 返回的图床地址不符合契约（/api/files/…）"
-      }
-    }
-    return {
-      status: "uploaded",
-      url: uploaded.url,
-      filename: attachment.filename,
-      downloadUrl: attachment.downloadUrl
-    }
+    const downloaded = await downloadSource(context, source)
+    return await uploadBlobOne(context, source, downloaded)
   } catch (error) {
     const value = toImportError(error)
     // 429 / 登录失效：整次搬运停手，不留半套内容
@@ -349,6 +465,107 @@ async function uploadOne(
       downloadUrl: attachment.downloadUrl,
       reason: describeImportError(error)
     }
+  }
+}
+
+/** 失败但仍保留了原地址：report 的那一行必须把这件事说清楚。 */
+function keepOriginalHint(outcome: ImageOutcome): ImageOutcome {
+  if (outcome.status !== "failed" || !outcome.reason) return outcome
+  return { ...outcome, reason: `${outcome.reason}，已保留原地址` }
+}
+
+/**
+ * 按地址转存一张图（站外图，以及附件清单里匹配不到的图）。
+ * 下载侧失败只算这一张：正文保留原地址，结果里给真实原因；
+ * 源站同源的地址仍守 §12.4 的红线（429 / 登录失效整次停手）。
+ */
+async function uploadByAddress(
+  context: ImportContext,
+  source: ImageSource
+): Promise<ImageOutcome> {
+  if (!source.url) {
+    return {
+      status: "failed",
+      filename: source.filename,
+      reason: "没有可下载的图片地址"
+    }
+  }
+  const sameOrigin = isSameOrigin(source.url, context.settings.confluenceUrl)
+  let downloaded: DownloadedImage
+  try {
+    downloaded = await downloadSource(context, source)
+  } catch (error) {
+    const value = toImportError(error)
+    if (value.stop && sameOrigin) throw value
+    return {
+      status: "failed",
+      filename: source.filename,
+      downloadUrl: source.url,
+      // 站外图床的错误 message 本身就是一句人话，不再套「源站接口…」前缀
+      reason: sameOrigin
+        ? `${describeImportError(error)}，已保留原地址`
+        : `${value.message}，已保留原地址`
+    }
+  }
+  try {
+    return keepOriginalHint(await uploadBlobOne(context, source, downloaded))
+  } catch (error) {
+    const value = toImportError(error)
+    if (value.stop) throw value
+    return {
+      status: "failed",
+      filename: source.filename,
+      downloadUrl: source.url,
+      reason: `${describeImportError(error)}，已保留原地址`
+    }
+  }
+}
+
+/** 缓存键按来源区分：两个站点同名的 image.png 不能串成同一张。 */
+function cacheKeyFor(ref: ImageRef): string {
+  if (ref.kind === "external") return ref.url ? `url:${ref.url}` : ""
+  const filename = ref.filename.trim().toLowerCase()
+  return filename ? `file:${filename}` : ""
+}
+
+/**
+ * 附件清单里匹配不到时的兜底地址：Confluence 标准的附件下载路径。
+ * 引用别页附件时用 `<ri:page>` 给的 pageId，否则按本页。
+ */
+function attachmentDownloadGuess(
+  context: ImportContext,
+  ref: ImageRef
+): string {
+  // drawio 图名不是真文件名，猜出来的地址没有意义
+  if (ref.kind === "drawio") return ""
+  const filename = ref.filename.trim()
+  if (!filename) return ""
+  const pageId = (ref.pageId || context.pageId).trim()
+  if (!pageId) return ""
+  return `${context.base}/download/attachments/${encodeURIComponent(pageId)}/${encodeURIComponent(filename)}`
+}
+
+async function pipelineAttachmentRef(
+  context: ImportContext,
+  ref: ImageRef
+): Promise<ImageOutcome> {
+  const attachment = matchAttachment(context.attachments, ref)
+  if (attachment) return uploadOne(context, attachment)
+  const guess = attachmentDownloadGuess(context, ref)
+  if (guess) {
+    return uploadByAddress(context, {
+      url: guess,
+      filename: ref.filename,
+      index: ref.index
+    })
+  }
+  return {
+    status: "failed",
+    filename: ref.filename,
+    reason:
+      ref.kind === "drawio"
+        ? "drawio 图没有配套的附件"
+        : "附件清单里没有这个文件"
   }
 }
 
@@ -367,31 +584,21 @@ async function runImagePipeline(
       current: index + 1,
       total: refs.length
     })
-    if (ref.kind === "external") {
-      outcomes.set(ref.index, {
-        status: "external",
-        filename: ref.filename,
-        reason: "外链图片保留原地址"
-      })
-      continue
-    }
-    const key = cacheKey(ref.filename)
+    const key = cacheKeyFor(ref)
     const cached = key ? cache.get(key) : undefined
     if (cached) {
       outcomes.set(ref.index, cached)
       continue
     }
-    const attachment = matchAttachment(context.attachments, ref)
-    const outcome = attachment
-      ? await uploadOne(context, attachment)
-      : {
-          status: "failed" as const,
-          filename: ref.filename,
-          reason:
-            ref.kind === "drawio"
-              ? "drawio 图没有配套的附件"
-              : "附件清单里没有这个文件"
-        }
+    // 站外图与附件走同一条「下载 → 上传 → 回填」链路；分类只影响下载通道
+    const outcome =
+      ref.kind === "external"
+        ? await uploadByAddress(context, {
+            url: ref.url ?? "",
+            filename: ref.filename,
+            index: ref.index
+          })
+        : await pipelineAttachmentRef(context, ref)
     if (key) cache.set(key, outcome)
     outcomes.set(ref.index, outcome)
   }
@@ -466,9 +673,6 @@ export async function executeImport(
       reason: outcome.reason || "未转存",
       downloadUrl: outcome.downloadUrl
     }))
-  const external = [...outcomes.values()].filter(
-    (outcome) => outcome.status === "external"
-  ).length
 
   const report: ImportReport = {
     title: decision.title,
@@ -480,7 +684,6 @@ export async function executeImport(
     images: {
       total: context.prepared.refs.length,
       uploaded,
-      external,
       failed
     },
     attachmentLinks: rendered.attachmentLinks,
