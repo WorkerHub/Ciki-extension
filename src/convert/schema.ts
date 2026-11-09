@@ -11,28 +11,30 @@
  *   HTML 载具是 data 属性（data-text-color / data-color / data-cell-bg）；
  * - Table / TaskList / TaskItem / Link / Underline 与 ciki 同配置。
  *
- * 依赖版本与 ciki 同锁 2.27.3；ciki 改 schema 时这里要同步，并重跑断言。
+ * 与 ciki 主项目同为 TipTap v3（3.33.0，源见 ciki 的 web/src/editor/extensions.ts 与
+ * web/src/editor/colors/extensions.ts）；ciki 改 schema 时这里要同步，并重跑
+ * src/convert/schema-contract.test.ts 的断言。
  */
-import type {
-  Attributes,
-  Extensions,
-  GlobalAttributes,
-  JSONContent
+import {
+  type Attributes,
+  type Extensions,
+  type GlobalAttributes,
+  generateJSON,
+  type JSONContent
 } from "@tiptap/core"
 import CodeBlock from "@tiptap/extension-code-block"
 import Color from "@tiptap/extension-color"
 import Highlight from "@tiptap/extension-highlight"
 import Image from "@tiptap/extension-image"
 import Link from "@tiptap/extension-link"
-import Table from "@tiptap/extension-table"
+import { Table } from "@tiptap/extension-table"
 import TableCell from "@tiptap/extension-table-cell"
 import TableHeader from "@tiptap/extension-table-header"
 import TableRow from "@tiptap/extension-table-row"
 import TaskItem from "@tiptap/extension-task-item"
 import TaskList from "@tiptap/extension-task-list"
-import TextStyle from "@tiptap/extension-text-style"
+import { TextStyle } from "@tiptap/extension-text-style"
 import Underline from "@tiptap/extension-underline"
-import { generateJSON } from "@tiptap/html"
 import StarterKit from "@tiptap/starter-kit"
 import { normalizeColor } from "./color"
 
@@ -98,12 +100,12 @@ export const WikiImage = Image.extend({
  * `tableCell/tableHeader.backgroundColor`。
  *
  * 约定：HTML 里颜色一律走 data 载具（`data-text-color` / `data-color` / `data-cell-bg`），
- * 值只认小写 `#rrggbb`（见 src/convert/color.ts）。原因是导入路径 `generateJSON` 走
- * zeed-dom：那边没有 CSSStyleDeclaration（`element.style` 是 undefined，原生 Color /
- * Highlight / 表格底色的 parseHTML 会直接抛错），只有普通属性三路一致。
+ * 值只认小写 `#rrggbb`（见 src/convert/color.ts）。原因是服务端消毒只认这套 data 载具、
+ * `style` 一律剥掉：只有普通属性才能让编辑 / 粘贴 / 导入三条入口落成同一个 JSON。
+ * 内联样式只作兜底读取——清洗阶段已经把 style 剥干净了。
  */
 
-/** zeed-dom 没有 CSSStyleDeclaration：`element.style` 可能不存在，取属性时必须兜住。 */
+/** 内联样式兜底：颜色契约以 data 载具为准，DOM 没有 CSSStyleDeclaration 时读不到就返回 null。 */
 function inlineStyle(
   element: HTMLElement,
   property: "color" | "backgroundColor"
@@ -199,7 +201,10 @@ export function createImportSchema(): Extensions {
   return [
     StarterKit.configure({
       codeBlock: false,
-      heading: { levels: [1, 2, 3, 4, 5, 6] }
+      heading: { levels: [1, 2, 3, 4, 5, 6] },
+      // v3 的 StarterKit 自带 link / underline：关掉，下面按 ciki 同款配置单独注册。
+      link: false,
+      underline: false
     }),
     WikiCodeBlock.configure({
       defaultLanguage: null,
