@@ -316,7 +316,8 @@ const ciki = createServer(async (req, res) => {
     const bytes = await readBody(req)
     if (!bytes.length) return sendJson(res, 400, { error: "empty" })
     const id = randomUUID()
-    const url = `/api/files/${id}.png`
+    // 真实后端把转存图放在 imports 类别下（R2 治理批），夹具照实口径来，别用平铺假数据
+    const url = `/api/files/imports/${id}.png`
     files.set(id, bytes)
     return sendJson(res, 201, {
       url,
@@ -354,7 +355,11 @@ const ciki = createServer(async (req, res) => {
   }
 
   if (url.pathname.startsWith("/api/files/")) {
-    const id = url.pathname.replace("/api/files/", "").replace(/\.png$/, "")
+    // 平铺（存量）与 `<pages|imports>/<uuid>.png`（新前缀）两种形态都收
+    const id = url.pathname
+      .replace("/api/files/", "")
+      .replace(/^(?:pages|imports)\//, "")
+      .replace(/\.png$/, "")
     const bytes = files.get(id)
     if (!bytes) return sendJson(res, 404, { error: "not found" })
     res.writeHead(200, {
