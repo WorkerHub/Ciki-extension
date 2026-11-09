@@ -1,0 +1,124 @@
+# 触发方式：tag push（vX.Y.Z）或手动指定已存在的 tag。
+# 流程：校验版本号 → lint / typecheck / test → 构建 → 打 zip（顶层 ciki-helper-<ver>/）
+# → 用 GITHUB_TOKEN 创建 GitHub Release 并上传 zip（notes 内含 SHA-256）。
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "要发布的版本 tag（需已存在），例如 v1.0.2"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate version
+        run: node scripts/check-release-version.mjs "$TAG"
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Type check
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Package extension
+        run: |
+          VERSION="${TAG#v}"
+          export VERSION
+          ROOT="ciki-helper-$VERSION"
+          mkdir -p "release/$ROOT"
+          cp -R dist/. "release/$ROOT/"
+          (cd release && zip -r -X -q "$ROOT.zip" "$ROOT")
+
+          node --input-type=module - <<'NODE'
+          import fs from "node:fs"
+          const version = process.env.VERSION
+          const manifest = JSON.parse(fs.readFileSync("dist/manifest.json", "utf8"))
+          if (manifest.version !== version) {
+            console.error(`::error::dist/manifest.json 的版本 ${manifest.version} 与 tag ${version} 不一致`)
+            process.exit(1)
+          }
+          console.log(`出厂清单版本校验通过：${manifest.version}`)
+          NODE
+
+          test "$(unzip -Z1 "release/$ROOT.zip" | grep -c "^$ROOT/manifest.json$")" = "1"
+          SHA256="$(sha256sum "release/$ROOT.zip" | awk '{print $1}')"
+          {
+            echo "VERSION=$VERSION"
+            echo "SHA256=$SHA256"
+            echo "ZIP=release/$ROOT.zip"
+          } >> "$GITHUB_ENV"
+          ls -l "release/$ROOT.zip"
+
+      - name: Write release notes
+        run: |
+          cat > release/notes.md <<EOF
+          ## Ciki助手 $TAG
+
+          Chrome 扩展（Manifest V3）发布包。完整说明见 [README](https://github.com/${GITHUB_REPOSITORY}/blob/main/README.md)。
+
+          ### 安装 / 升级
+
+          1. 下载下方 Assets 里的 \`ciki-helper-$VERSION.zip\`（**不要**下载 GitHub 自动附带的 Source code 压缩包）。
+          2. 解压到一个固定目录：压缩包里有一层 \`ciki-helper-$VERSION/\` 文件夹，选里面直接放着 \`manifest.json\` 的那一层。
+          3. Chrome 打开 \`chrome://extensions/\`，开启右上角「开发者模式」，点「加载已解压的扩展程序」，选中上一步的目录。
+          4. 升级：下载新 zip，解压覆盖同一个目录，回到 \`chrome://extensions/\` 点插件卡片上的刷新按钮；版本号应显示 ${VERSION}。
+
+          ### 校验
+
+          - 压缩包 SHA-256：\`$SHA256\`
+
+          ---
+
+          ## Ciki Helper $TAG
+
+          Chrome extension (Manifest V3) release package. Full guide: [README.en.md](https://github.com/${GITHUB_REPOSITORY}/blob/main/README.en.md).
+
+          1. Download \`ciki-helper-$VERSION.zip\` from the Assets below (**not** the auto-generated Source code archive).
+          2. Unzip it into a permanent folder — the archive has one \`ciki-helper-$VERSION/\` level; pick the level that contains \`manifest.json\`.
+          3. Open \`chrome://extensions/\`, turn on Developer mode, click "Load unpacked" and select that folder.
+          4. To update: unzip the new package over the same folder, then click the reload button on the extension card. The version shown should become $VERSION.
+
+          - Archive checksum (SHA-256): \`$SHA256\`
+          EOF
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$TAG" "$ZIP" --title "Ciki助手 $TAG" --notes-file release/notes.md --verify-tag --latest
