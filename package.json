@@ -1,6 +1,6 @@
 {
   "name": "ciki-helper",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "private": true,
   "type": "module",
   "description": "在源文档页一键剪藏到 Ciki 的 Chrome MV3 插件",
