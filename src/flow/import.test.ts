@@ -1,7 +1,12 @@
 import { type ChildProcess, spawn } from "node:child_process"
 import { resolve } from "node:path"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { ConfluenceQueue, summarizeQueue } from "@/background/confluence-queue"
+import {
+  ConfluenceQueue,
+  MAX_GAP_MS,
+  MIN_GAP_MS,
+  summarizeQueue
+} from "@/background/confluence-queue"
 import { ImportApi } from "@/ciki/api"
 import type { ImageRef } from "@/convert/storage"
 import { arrayBufferToDataUrl } from "@/shared/bytes"
@@ -29,6 +34,9 @@ const CIKI = `http://127.0.0.1:${CIKI_PORT}`
 /** 站外图床（与源站跨源）：正文里的 ri:url 走它。 */
 const EXTERNAL = `http://127.0.0.1:${EXTERNAL_PORT}`
 const PAGE_ID = "63444152"
+/** 12 张附件图的图集页：验收「多图页（≥10 图）」的节流实测用。 */
+const GALLERY_PAGE_ID = "63444153"
+const GALLERY_IMAGE_COUNT = 12
 const TOKEN = "fixture-token"
 
 let server: ChildProcess
@@ -65,11 +73,19 @@ function installChromeStub() {
     }
   }
 
-  // 与后台同款的单一队列（真 fetch、真 1000ms 间隔）
+  // 与后台同款的单一队列（真 fetch、真 100–300ms 随机间隔）
+  // 随机源给固定序列，保证每次跑都是同一组间隔；sleep 记录下来当节流证据。
+  const randoms = [0.05, 0.5, 0.95]
+  let drawn = 0
+  const waits: number[] = []
   const queue = new ConfluenceQueue({
     fetch: (url, init) => fetch(url, init),
     now: () => Date.now(),
-    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+    sleep: async (ms) => {
+      waits.push(ms)
+      await new Promise((resolve) => setTimeout(resolve, ms))
+    },
+    random: () => randoms[drawn++ % randoms.length]
   })
 
   const handle = async (message: RequestMessage): Promise<Reply<unknown>> => {
@@ -156,7 +172,7 @@ function installChromeStub() {
       onInstalled: { addListener: () => undefined }
     }
   }
-  return queue
+  return { queue, waits }
 }
 
 const job: ImportJob = {
@@ -170,7 +186,19 @@ const job: ImportJob = {
   }
 }
 
-let queue: ConfluenceQueue
+/** 一页 12 张附件图：验收多图页的节流实测。 */
+const galleryJob: ImportJob = {
+  runId: "run-gallery",
+  tabId: 2,
+  probe: {
+    pageId: GALLERY_PAGE_ID,
+    contextPath: "",
+    pageUrl: `${CONFLUENCE}/pages/viewpage.action?pageId=${GALLERY_PAGE_ID}`,
+    documentTitle: "图集页（12 图）"
+  }
+}
+
+let harness: { queue: ConfluenceQueue; waits: number[] }
 
 beforeAll(async () => {
   server = spawn("node", [resolve(process.cwd(), "test/servers/index.mjs")], {
@@ -186,7 +214,7 @@ beforeAll(async () => {
   await waitFor(`${CONFLUENCE}/__log`)
   await waitFor(`${CIKI}/__log`)
   await waitFor(`${EXTERNAL}/__log`)
-  queue = installChromeStub()
+  harness = installChromeStub()
   await saveSettings({
     confluenceUrl: CONFLUENCE,
     cikiUrl: CIKI,
@@ -260,10 +288,11 @@ describe("整页搬运动编（夹具 HTTP，不 mock 接口）", () => {
     expect(content.contentJson).toContain(`${EXTERNAL}/pic/blocked.png`)
     expect(content.contentJson).not.toContain(`${EXTERNAL}/pic/flow.png`)
 
-    // 节流：这次测试的队列记录里，相邻请求间隔 ≥1000ms
-    const summary = summarizeQueue(queue.snapshot())
+    // 节流：这次测试的队列记录里，相邻请求起始间隔 ≥100ms，最短间隔落在 100–300ms
+    const summary = summarizeQueue(harness.queue.snapshot())
     expect(summary.count).toBeGreaterThanOrEqual(3)
-    expect(summary.minGapMs).toBeGreaterThanOrEqual(1000)
+    expect(summary.minGapMs).toBeGreaterThanOrEqual(MIN_GAP_MS - 20)
+    expect(summary.minGapMs).toBeLessThanOrEqual(MAX_GAP_MS + 20)
 
     // 再搬一次同名页：走更新路径，不新建
     const again = await prepareImport(job)
@@ -280,6 +309,45 @@ describe("整页搬运动编（夹具 HTTP，不 mock 接口）", () => {
     )
     expect(updated.pageId).toBe(result.pageId)
     expect(updated.report.conflict).toBe("update")
+  }, 60_000)
+
+  it("一页 12 张图：逐张串行，相邻请求间隔全在 100–300ms（±20ms）", async () => {
+    const recordsBefore = harness.queue.snapshot().records.length
+    const waitsBefore = harness.waits.length
+    const prepared = await prepareImport(galleryJob)
+    expect(prepared.confirm.sourceTitle).toBe("图集页（12 图）")
+    expect(prepared.context.prepared.refs).toHaveLength(GALLERY_IMAGE_COUNT)
+    const result = await executeImport(
+      prepared.context,
+      {
+        title: prepared.confirm.sourceTitle,
+        spaceId: "space-default",
+        parentId: "p-root",
+        conflict: "create_copy"
+      },
+      () => undefined
+    )
+    expect(result.report.images.uploaded).toBe(GALLERY_IMAGE_COUNT)
+    expect(result.report.images.failed).toEqual([])
+
+    // 时序证据：2 次 REST 取正文/附件清单 + 12 张图各一次下载，全部经同一队列串行
+    const records = harness.queue.snapshot().records.slice(recordsBefore)
+    expect(records.length).toBeGreaterThanOrEqual(GALLERY_IMAGE_COUNT + 2)
+    const intervals = records
+      .slice(1)
+      .map((record, index) => record.startedAt - records[index].startedAt)
+    expect(intervals.length).toBeGreaterThanOrEqual(GALLERY_IMAGE_COUNT + 1)
+    for (const interval of intervals) {
+      expect(interval).toBeGreaterThanOrEqual(MIN_GAP_MS - 20)
+      expect(interval).toBeLessThanOrEqual(MAX_GAP_MS + 20)
+    }
+    // 随机取值不恒定：这一轮里至少出现两种不同的间隔
+    expect(new Set(intervals).size).toBeGreaterThanOrEqual(2)
+    // 实际 sleep 的时长不超过目标上限
+    for (const wait of harness.waits.slice(waitsBefore)) {
+      expect(wait).toBeGreaterThan(0)
+      expect(wait).toBeLessThanOrEqual(MAX_GAP_MS)
+    }
   }, 60_000)
 
   it("附件图下载失败时正文不中断，报告里逐条列出", async () => {
