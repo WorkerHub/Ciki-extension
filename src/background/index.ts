@@ -2,7 +2,7 @@
  * 后台服务工人：扩展里所有 Confluence 网络请求的唯一出口 + 内容脚本注册 + 事件桥中继。
  *
  * 为什么请求都放这里：
- * - 一个队列 -> 串行、固定间隔，节流口径只有一处；
+ * - 一个队列 -> 串行、随机间隔（100–300ms），节流口径只有一处；
  * - 服务工人被回收也不要紧，队列状态落 storage.session；
  * - 除了这里，没有任何地方能拿浏览器会话去请求 Confluence（域名白名单在这里查）。
  */
@@ -42,6 +42,7 @@ async function getQueue(): Promise<ConfluenceQueue> {
       fetch: (url, init) => fetch(url, init),
       now: () => Date.now(),
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      random: () => Math.random(),
       onRecord: (state: QueueSnapshot) => {
         void saveQueueSnapshot(state)
       }

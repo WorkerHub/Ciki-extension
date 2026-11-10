@@ -1,16 +1,23 @@
 /**
  * Confluence 请求的唯一出口（后台服务工人里）。
  *
- * §12.4 红线：串行、零并发、间隔 0.5–1.5s；遇到 429 或重定向到登录页立刻停手，
- * 不重试硬闯；不做任何拟人伪装（不改 UA、不掺掩护请求、不随机化间隔）。
- * 所以这里是固定 1000ms 间隔的单一队列 —— 整条链路上没有第二个去 concurrency 的地方。
+ * 红线（2026-11-10 用户拍板修订）：串行、零并发；相邻请求的起始间隔在 100–300ms
+ * 之间随机取值；遇到 429 或重定向到登录页立刻停手，不重试硬闯；不掺掩护请求、
+ * 不改 UA、不隐藏插件特征。（原「不随机化间隔」一项经用户知情拍板撤销。）
+ *
+ * 间隔以「上一次请求的起始时间」为基准：每次请求独立抽一个目标间隔，扣掉上一请求
+ * 已经用掉的时间后补足 —— 与改动前的时序完全一致，只换时长来源，不把请求耗时
+ * 叠加到间隔之外。因此相邻请求的起始间隔为 max(抽取值, 上一请求耗时)：正常情况
+ * 落在 [MIN_GAP_MS, MAX_GAP_MS] 内，上一请求本身更久时就顺延到它完成。
+ * 随机源可注入（QueueDeps.random），测试用确定性序列。
  *
  * 队列状态（最近一次请求时间 + 每次请求的起始时间）会落到 storage.session：
  * MV3 的服务工人随时可能被回收，重启后靠它继续守间隔，也给交付自测留证据。
  */
 import { ImportError } from "@/shared/errors"
 
-export const MIN_GAP_MS = 1000
+export const MIN_GAP_MS = 100
+export const MAX_GAP_MS = 300
 const MAX_RECORDS = 200
 
 export interface QueueRecord {
@@ -28,6 +35,8 @@ export interface QueueDeps {
   fetch: (url: string, init: RequestInit) => Promise<Response>
   now: () => number
   sleep: (ms: number) => Promise<void>
+  /** [0, 1) 的随机源：注入确定性序列给测试，生产传 Math.random。 */
+  random: () => number
   onRecord?: (snapshot: QueueSnapshot) => void
 }
 
@@ -64,10 +73,18 @@ export class ConfluenceQueue {
     return run
   }
 
+  /** 本次请求的目标间隔：闭区间 [100, 300] 内的整数毫秒，每次独立抽取。 */
+  private nextGapMs(): number {
+    const span = MAX_GAP_MS - MIN_GAP_MS + 1
+    const unit = Math.min(1, Math.max(0, this.deps.random()))
+    return Math.min(MAX_GAP_MS, MIN_GAP_MS + Math.floor(unit * span))
+  }
+
   private async execute(url: string, init: RequestInit): Promise<Response> {
     if (this.started) {
+      const targetGap = this.nextGapMs()
       const waited = this.deps.now() - this.lastStartedAt
-      if (waited < MIN_GAP_MS) await this.deps.sleep(MIN_GAP_MS - waited)
+      if (waited < targetGap) await this.deps.sleep(targetGap - waited)
     }
     this.started = true
     this.lastStartedAt = this.deps.now()

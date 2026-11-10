@@ -10,7 +10,7 @@
  * - :8813 假图床（与源站跨源）：正文里的站外图从这里取，验「按原地址下载 → 转存」，
  *   以及防盗链 403、回登录页、慢响应这几类单张失败。
  *
- * 所有请求都带时间戳记在内存里，`GET /__log` 取出来就能核对「串行 + 间隔 ≥1000ms」。
+ * 所有请求都带时间戳记在内存里，`GET /__log` 取出来就能核对「串行 + 间隔 100–300ms」。
  * 报告与 README 里必须写清楚：这组数字来自夹具，真实例由 QA 在真页上验。
  */
 
@@ -23,6 +23,12 @@ const CIKI_PORT = Number(process.env.CIKI_PORT || 8812)
 const EXTERNAL_PORT = Number(process.env.EXTERNAL_PORT || 8813)
 const TOKEN = process.env.FIXTURE_TOKEN || "fixture-token"
 const PAGE_ID = "63444152"
+/** 多图页（12 张附件图）：给「相邻间隔 100–300ms」的验收当被测页。 */
+const GALLERY_PAGE_ID = "63444153"
+const GALLERY_IMAGES = Array.from(
+  { length: 12 },
+  (_, index) => `gallery-${String(index + 1).padStart(2, "0")}.png`
+)
 /** 站外图床的 origin：端口不同就是跨源，正文里的 `ri:url` 走它。 */
 const EXTERNAL_ORIGIN = `http://127.0.0.1:${EXTERNAL_PORT}`
 
@@ -63,6 +69,13 @@ const STORAGE = `<h1>支付服务部署手册</h1>
 <p><ac:image ac:alt="外链图"><ri:url ri:value="${EXTERNAL_ORIGIN}/pic/flow.png" /></ac:image></p>
 <p><ac:image ac:alt="防盗链图"><ri:url ri:value="${EXTERNAL_ORIGIN}/pic/blocked.png" /></ac:image></p>
 <p>参考资料：<ac:link><ri:page ri:content-id="1" /><ac:plain-text-link-body><![CDATA[支付服务概览]]></ac:plain-text-link-body></ac:link></p>
+`
+
+const GALLERY_STORAGE = `<h1>图集页（12 图）</h1>
+${GALLERY_IMAGES.map(
+  (filename) =>
+    `<p><ac:image ac:alt="${filename}"><ri:attachment ri:filename="${filename}" /></ac:image></p>`
+).join("\n")}
 `
 
 function createLog() {
@@ -142,6 +155,21 @@ const confluence = createServer(async (req, res) => {
     )
   }
 
+  if (url.pathname === `/rest/api/content/${GALLERY_PAGE_ID}`) {
+    return sendJson(res, 200, {
+      id: GALLERY_PAGE_ID,
+      title: "图集页（12 图）",
+      body: {
+        storage: { value: GALLERY_STORAGE, representation: "storage" }
+      },
+      version: { number: 1 },
+      _links: {
+        base: origin,
+        webui: `/pages/viewpage.action?pageId=${GALLERY_PAGE_ID}`
+      }
+    })
+  }
+
   if (url.pathname === `/rest/api/content/${PAGE_ID}`) {
     return sendJson(res, 200, {
       id: PAGE_ID,
@@ -152,6 +180,22 @@ const confluence = createServer(async (req, res) => {
         base: origin,
         webui: `/pages/viewpage.action?pageId=${PAGE_ID}`
       }
+    })
+  }
+
+  if (
+    url.pathname === `/rest/api/content/${GALLERY_PAGE_ID}/child/attachment`
+  ) {
+    return sendJson(res, 200, {
+      results: GALLERY_IMAGES.map((title) => ({
+        title,
+        metadata: { mediaType: "image/png" },
+        _links: {
+          base: origin,
+          download: `/download/attachments/${GALLERY_PAGE_ID}/${title}`
+        }
+      })),
+      _links: { base: origin }
     })
   }
 
@@ -181,6 +225,19 @@ const confluence = createServer(async (req, res) => {
 
   if (url.pathname === "/rest/api/content") {
     return sendJson(res, 200, { results: [], size: 0 })
+  }
+
+  if (
+    GALLERY_IMAGES.some(
+      (filename) =>
+        url.pathname === `/download/attachments/${GALLERY_PAGE_ID}/${filename}`
+    )
+  ) {
+    res.writeHead(200, {
+      "Content-Type": "image/png",
+      "Content-Length": ICON.length
+    })
+    return res.end(ICON)
   }
 
   if (url.pathname === `/download/attachments/${PAGE_ID}/arch.png`) {

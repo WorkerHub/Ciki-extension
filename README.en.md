@@ -33,6 +33,18 @@ Chinese; the original labels are included in parentheses below.
 - **One page at a time**: every run is started by your click; there is no batch mode and no
   background polling.
 
+## Design notes
+
+Every request to the source site (page body, attachment list, image bytes, paste re-fetch) goes
+through the same background queue: serial, zero concurrency, with the start-to-start interval
+between consecutive requests drawn independently from 100–300ms. When the source site answers 429
+or redirects a request to the login page, the extension stops immediately and explains why in the
+completion report; it does not retry or force its way through.
+
+Requests carry only the current browser session and read content you are allowed to access; the
+extension does not change the User-Agent, does not add cover-traffic requests, and does not hide
+that the requests come from the extension.
+
 ## Installation
 
 On [Releases](https://github.com/WorkerHub/Ciki-helper/releases/latest), download the extension zip
