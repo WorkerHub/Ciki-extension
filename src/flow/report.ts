@@ -55,7 +55,7 @@ export function reportLines(report: ImportReport): string[] {
   lines.push(
     `对源站的请求 ${report.queue.count} 次，最短间隔 ${
       report.queue.minGapMs === null ? "—" : `${report.queue.minGapMs}ms`
-    }（串行，间隔随机 100–300ms）`
+    }`
   )
   lines.push(
     report.conflict === "update"

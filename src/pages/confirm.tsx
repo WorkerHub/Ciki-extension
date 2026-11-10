@@ -368,8 +368,7 @@ export function Confirm() {
             {phase === "running" ? (
               <div className="space-y-2 text-sm">
                 <div className="flex items-center gap-2">
-                  <Loader2 className="animate-spin" />{" "}
-                  正在剪藏，逐张图片串行处理
+                  <Loader2 className="animate-spin" /> 正在剪藏中…
                 </div>
                 <div className="text-xs text-muted-foreground">
                   {progress[progress.length - 1] || "准备中…"}
