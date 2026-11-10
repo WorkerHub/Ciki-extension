@@ -35,6 +35,7 @@ const STORAGE = `<h1>支付服务部署手册</h1>
 <h2>1. 环境准备</h2>
 <ac:structured-macro ac:name="code">
   <ac:parameter ac:name="language">java</ac:parameter>
+  <ac:parameter ac:name="collapse">true</ac:parameter>
   <ac:plain-text-body><![CDATA[public class Demo {
   // 条件：a < b && b > 0
   public static void main(String[] args) {

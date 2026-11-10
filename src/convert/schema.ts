@@ -43,6 +43,10 @@ import { normalizeColor } from "./color"
  * 只改语言属性的解析方式：官方的解析读 `firstElementChild.classList`，而导入时
  * HTML 走的是无浏览器 DOM 的解析器，classList 可能是空的；改读 class 属性后
  * 两边得到同一个 `language`，JSON 结构不变。
+ *
+ * `collapsed` 是契约里代码块折叠的三态：`true` / `false` / `null`（未表态，阅读页按
+ * 行数自动规则决定）。HTML 载具是 `pre[data-collapsed]`（与颜色一样走属性而不是
+ * style），只有转换器的 code 宏会写它。
  */
 export const WikiCodeBlock = CodeBlock.extend({
   addAttributes() {
@@ -61,6 +65,22 @@ export const WikiCodeBlock = CodeBlock.extend({
           return match ? match[1] : null
         },
         rendered: false
+      },
+      collapsed: {
+        default: null,
+        // 载具只认两个字面量：别的值（大小写不对、1、空串）一律当未表态，
+        // 别让脏值进 JSON —— 后端只接受布尔或 null。
+        parseHTML: (element: HTMLElement) => {
+          const value = element.getAttribute("data-collapsed")
+          if (value === "true") return true
+          if (value === "false") return false
+          return null
+        },
+        renderHTML: (attributes: Record<string, unknown>) => {
+          const collapsed = attributes.collapsed
+          if (collapsed !== true && collapsed !== false) return {}
+          return { "data-collapsed": collapsed ? "true" : "false" }
+        }
       }
     }
   }

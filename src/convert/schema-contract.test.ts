@@ -49,6 +49,8 @@ describe("导入 schema 与 ciki v3 对齐", () => {
   })
 
   it("v3 新增/沿用的属性都声明了（后端按同一扩展集校验属性名）", () => {
+    // 代码块折叠（契约：true / false / null 三态）——多一个少一个都会被后端 400
+    expect(nodeAttrs("codeBlock")).toEqual(["collapsed", "language"])
     expect(nodeAttrs("tableCell")).toEqual([
       "align",
       "backgroundColor",
