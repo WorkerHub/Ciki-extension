@@ -135,3 +135,75 @@ export const COLOR_STORAGE = `
 // 真实样本（body.storage 原文，正文换中性占位）：单行排布与原文一致，
 // 这样标签之间的空白文本节点、&nbsp; 与 style 值都原样进管线。
 export const REAL_COLOR_STORAGE = `<p><ac:image ac:width="666"><ri:attachment ri:filename="image2025-3-9_1-2-19.png" /></ac:image></p><p>占位说明一：这一行是图表下方的说明文字。</p><p><strong>占位标题甲</strong><strong>&nbsp;</strong><strong>占位标题乙</strong><strong>&nbsp;</strong><strong>占位标题丙</strong></p><p style="margin-left: 30.0px;"><strong>占位词</strong><strong>&nbsp;</strong><strong>占位标签：</strong>占位正文一<span style="color: rgb(255,0,0);"><strong>占位红字</strong></span>占位正文二<strong>占位加粗一</strong>占位正文三<span style="color: rgb(255,153,0);">占位橙字一</span></p><p style="margin-left: 30.0px;"><strong>占位词</strong><strong>&nbsp;</strong><strong>占位标签：</strong>占位正文四<span style="color: rgb(51,51,51);"><strong>占位灰字加粗一</strong>占位灰字段一<strong>占位灰字加粗二</strong>占位灰字段二</span>占位正文五<span style="color: rgb(51,51,51);">占位灰字段三</span>占位正文六<span style="color: rgb(255,153,0);">占位橙字二</span></p><p style="margin-left: 30.0px;"><strong>占位标签：</strong>占位正文七<strong>占位代码一</strong>占位正文八<strong>占位代码二</strong>占位正文九<span style="color: rgb(255,153,0);">占位橙字三</span></p><p style="margin-left: 30.0px;"><strong>占位标签：</strong>占位正文十<span style="color: rgb(255,153,0);">占位橙字四</span></p><p><strong>占位标题丁</strong><strong>&nbsp;</strong><strong>占位标题戊</strong></p><p style="margin-left: 30.0px;"><strong>占位正文十一</strong><span style="color: rgb(255,153,0);">占位橙字五</span></p><p><strong>占位标题己</strong></p><p style="margin-left: 30.0px;">占位正文十二</p><p style="margin-left: 30.0px;"><strong>占</strong><strong>位标签：</strong>占位正文十三</p><p style="margin-left: 30.0px;"><strong>占</strong><strong>位标签：</strong>占位正文十四<span style="color: rgb(255,153,0);">占位橙字六</span></p><p style="margin-left: 30.0px;"><strong>占位标签：</strong>占位正文十五</p><p style="margin-left: 30.0px;"><strong>占位标签：</strong>占位正文十六<span style="color: rgb(255,153,0);">占位橙字七</span></p><p style="margin-left: 30.0px;"><strong>占位词甲</strong><strong>：</strong>占位正文十七<span style="color: rgb(255,153,0);">占位橙字八</span></p><p style="margin-left: 30.0px;"><span style="color: rgb(255,204,0);"><ac:image ac:width="555"><ri:attachment ri:filename="image2025-6-23_14-50-36.png" /></ac:image></span></p><p><strong>占位标题庚</strong></p><p style="margin-left: 30.0px;">占位正文十八</p><p style="margin-left: 30.0px;"><ac:image ac:width="666"><ri:attachment ri:filename="image2025-6-23_15-9-55.png" /></ac:image></p><p>占位说明二：原文此处有一对中文引号 &ldquo;占位&rdquo;。</p>`
+
+/**
+ * 代码块折叠夹具（契约：`codeBlock.attrs.collapsed` 布尔，`null` = 未表态）。
+ * 四块覆盖四种来源：
+ * ① 宏显式 `collapse=true`  → collapsed true
+ * ② 宏显式 `collapse=false` → collapsed false（21 行，超过自动折叠阈值也一样）
+ * ③ 宏没有 collapse 参数    → collapsed false（Confluence 默认展开，必须显式保真）
+ * ④ 裸 <pre>（非宏）        → 无载具，collapsed null（交阅读页自动规则）
+ */
+export const CODE_COLLAPSE_STORAGE = `
+<ac:structured-macro ac:name="code" ac:schema-version="1">
+  <ac:parameter ac:name="language">java</ac:parameter>
+  <ac:parameter ac:name="collapse">true</ac:parameter>
+  <ac:plain-text-body><![CDATA[public class Folded {
+    // 作者把这条设为折叠：a < b && b > 0
+    public static void main(String[] args) {
+        System.out.println("author collapsed");
+    }
+}]]></ac:plain-text-body>
+</ac:structured-macro>
+<ac:structured-macro ac:name="code" ac:schema-version="1">
+  <ac:parameter ac:name="language">sql</ac:parameter>
+  <ac:parameter ac:name="collapse">false</ac:parameter>
+  <ac:plain-text-body><![CDATA[INSERT INTO settlement_step (no, note) VALUES (1, '步骤01');
+INSERT INTO settlement_step (no, note) VALUES (2, '步骤02');
+INSERT INTO settlement_step (no, note) VALUES (3, '步骤03');
+INSERT INTO settlement_step (no, note) VALUES (4, '步骤04');
+INSERT INTO settlement_step (no, note) VALUES (5, '步骤05');
+INSERT INTO settlement_step (no, note) VALUES (6, '步骤06');
+INSERT INTO settlement_step (no, note) VALUES (7, '步骤07');
+INSERT INTO settlement_step (no, note) VALUES (8, '步骤08');
+INSERT INTO settlement_step (no, note) VALUES (9, '步骤09');
+INSERT INTO settlement_step (no, note) VALUES (10, '步骤10');
+INSERT INTO settlement_step (no, note) VALUES (11, '步骤11');
+INSERT INTO settlement_step (no, note) VALUES (12, '步骤12');
+INSERT INTO settlement_step (no, note) VALUES (13, '步骤13');
+INSERT INTO settlement_step (no, note) VALUES (14, '步骤14');
+INSERT INTO settlement_step (no, note) VALUES (15, '步骤15');
+INSERT INTO settlement_step (no, note) VALUES (16, '步骤16');
+INSERT INTO settlement_step (no, note) VALUES (17, '步骤17');
+INSERT INTO settlement_step (no, note) VALUES (18, '步骤18');
+INSERT INTO settlement_step (no, note) VALUES (19, '步骤19');
+INSERT INTO settlement_step (no, note) VALUES (20, '步骤20');
+INSERT INTO settlement_step (no, note) VALUES (21, '步骤21');]]></ac:plain-text-body>
+</ac:structured-macro>
+<ac:structured-macro ac:name="code" ac:schema-version="1">
+  <ac:parameter ac:name="language">bash</ac:parameter>
+  <ac:plain-text-body><![CDATA[echo "步骤01"
+echo "步骤02"
+echo "步骤03"
+echo "步骤04"
+echo "步骤05"
+echo "步骤06"
+echo "步骤07"
+echo "步骤08"
+echo "步骤09"
+echo "步骤10"
+echo "步骤11"
+echo "步骤12"
+echo "步骤13"
+echo "步骤14"
+echo "步骤15"
+echo "步骤16"
+echo "步骤17"
+echo "步骤18"
+echo "步骤19"
+echo "步骤20"
+echo "步骤21"
+echo "步骤22"]]></ac:plain-text-body>
+</ac:structured-macro>
+<pre><code class="language-text">预格式化文本：未表态，交阅读页自动规则。</code></pre>
+`

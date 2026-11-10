@@ -287,6 +287,11 @@ describe("整页搬运动编（夹具 HTTP，不 mock 接口）", () => {
     expect(content.contentJson).toContain("/api/files/imports/")
     expect(content.contentJson).toContain(`${EXTERNAL}/pic/blocked.png`)
     expect(content.contentJson).not.toContain(`${EXTERNAL}/pic/flow.png`)
+    // 代码块折叠：夹具页的 code 宏带 collapse=true，落库的 JSON 里就是折叠态，
+    // 而且代码本身一行不少（折叠只是显示态，正文不能因此丢）
+    expect(content.contentJson).toContain('"collapsed":true')
+    expect(content.contentJson).toContain("public class Demo {")
+    expect(content.contentJson).toContain("// 条件：a < b && b > 0")
 
     // 节流：这次测试的队列记录里，相邻请求起始间隔 ≥100ms，最短间隔落在 100–300ms
     const summary = summarizeQueue(harness.queue.snapshot())

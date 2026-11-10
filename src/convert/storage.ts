@@ -153,6 +153,10 @@ const KEEP_TAGS = new Set([
   "small"
 ])
 
+/**
+ * 结构属性白名单（按标签取）。注意 `pre` 不在表里：storage 里的裸 `<pre>` 不带
+ * `data-collapsed`，它走契约的「未表态」分支；折叠载具只由 code 宏显式写下。
+ */
 const KEEP_ATTRS: Record<string, string[]> = {
   a: ["href", "title"],
   td: ["colspan", "rowspan"],
@@ -554,7 +558,15 @@ function renderMacro(
   switch (name) {
     case "code": {
       const language = paramValue(element, "language", context.blocks)
+      // 折叠三态（契约：codeBlock.attrs.collapsed 布尔，null = 未表态）：
+      // Confluence 默认展开，所以 `collapse` 参数无论写没写都要显式落一个布尔值，
+      // 不能留缺省 —— 否则 ciki 阅读页的「>20 行自动折」会把源站的长代码误折。
+      const collapse = paramValue(element, "collapse", context.blocks)
       const pre = createElement(context, "pre")
+      pre.setAttribute(
+        "data-collapsed",
+        collapse.toLowerCase() === "true" ? "true" : "false"
+      )
       const code = createElement(context, "code")
       if (/^[\w+#-]+$/.test(language)) {
         code.setAttribute("class", `language-${language.toLowerCase()}`)

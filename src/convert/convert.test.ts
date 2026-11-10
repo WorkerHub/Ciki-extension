@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
+import CODE_COLLAPSED_EXPECTED from "@/test/fixtures/code-collapsed.expected.json"
 import {
+  CODE_COLLAPSE_STORAGE,
   COLOR_STORAGE,
   IMAGE_STORAGE,
   PLAIN_STORAGE,
@@ -496,5 +498,61 @@ describe("真实样本：整页剪藏不丢颜色", () => {
 
   it("除颜色载具外没有内联样式残留", () => {
     expect(cleaned).not.toMatch(/\sstyle=/)
+  })
+})
+
+/**
+ * 代码块折叠（契约：`codeBlock.attrs.collapsed` 为布尔，`null` = 未表态）。
+ * 源站把代码宏设成折叠 → 导入后就是折叠；没表态的普通长代码必须显式 false，
+ * 否则 ciki 阅读页的「>20 行自动折」会把源站的展开长代码误折。
+ */
+describe("代码块折叠：collapse 参数 → 契约 JSON", () => {
+  const { doc, cleaned } = convert(CODE_COLLAPSE_STORAGE)
+  const blocks = nodesOfType(doc, "codeBlock")
+
+  it("整页 JSON 与进仓快照一致", () => {
+    expect(doc).toEqual(CODE_COLLAPSED_EXPECTED)
+  })
+
+  it("四种来源落成 true / false / false / null", () => {
+    expect(blocks.map((block) => block.attrs?.collapsed)).toEqual([
+      true,
+      false,
+      false,
+      null
+    ])
+    expect(blocks.map((block) => block.attrs?.language)).toEqual([
+      "java",
+      "sql",
+      "bash",
+      null
+    ])
+  })
+
+  it("折叠块代码逐字完整（CDATA 里的 < 与 && 都在）", () => {
+    const folded = textOfNode(blocks[0])
+    expect(folded).toContain("public class Folded {")
+    expect(folded).toContain("// 作者把这条设为折叠：a < b && b > 0")
+    expect(folded).toContain('System.out.println("author collapsed");')
+  })
+
+  it("没表态的长代码仍是完整 22 行，只是被显式标成展开", () => {
+    expect(textOfNode(blocks[2]).split("\n")).toHaveLength(22)
+    expect(blocks[2].attrs.collapsed).toBe(false)
+  })
+
+  it("载具值不合契约时按未表态处理，脏值不进 JSON", () => {
+    for (const dirty of ["True", "1", ""]) {
+      const result = convert(
+        `<pre data-collapsed="${dirty}"><code class="language-text">x</code></pre>`
+      )
+      expect(nodesOfType(result.doc, "codeBlock")[0].attrs.collapsed).toBeNull()
+    }
+  })
+
+  it("清洗后的 HTML 只有三段代码宏带载具，裸 <pre> 不带", () => {
+    expect(cleaned.match(/data-collapsed=/g) ?? []).toHaveLength(3)
+    expect(cleaned).toContain('<pre data-collapsed="true">')
+    expect(cleaned).toContain('<pre data-collapsed="false">')
   })
 })
