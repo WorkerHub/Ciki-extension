@@ -12,6 +12,8 @@
  * 也不会在编辑器里替用户去请求外链图片。
  *
  * 注意：前端清洗不是安全边界，服务端保存时还会二次消毒（规格 §5.8）。
+ * 插件自用的例外：代码块的折叠载具 `pre[data-collapsed]` 是导入侧（转换器的 code 宏）
+ * 写下的，Ciki 的粘贴清洗管线里没有它；同步回 Ciki 时按需带上，否则两边行为不一致。
  */
 import { normalizeColor } from "./color"
 import { isHostedImageSrc, safeExternalUrl } from "./media"
@@ -169,6 +171,13 @@ export function cleanConfluenceHtml(html: string): string {
     const lang = detectLang(pre)
     const text = extractPreText(pre).replace(/\n+$/, "")
     const nextPre = doc.createElement("pre")
+    // 折叠载具随块走：重建会丢掉所有属性，这里显式搬 `data-collapsed`。
+    // 只认 "true"/"false" 两个字面量，别的一律不往下传 —— 契约里 collapsed
+    // 只允许布尔或 null，脏值不能靠后端 400 来兜。
+    const collapsed = pre.getAttribute("data-collapsed")
+    if (collapsed === "true" || collapsed === "false") {
+      nextPre.setAttribute("data-collapsed", collapsed)
+    }
     const code = doc.createElement("code")
     if (lang) code.setAttribute("class", `language-${lang}`)
     code.textContent = text
@@ -324,6 +333,7 @@ export function cleanConfluenceHtml(html: string): string {
     SPAN: ["data-text-color"],
     MARK: ["data-color"],
     COL: ["width"],
+    PRE: ["data-collapsed"],
     CODE: ["class"],
     UL: ["data-type"],
     LI: ["data-type", "data-checked"]
