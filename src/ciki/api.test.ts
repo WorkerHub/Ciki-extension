@@ -170,9 +170,26 @@ describe("导入接口的空间参数（契约：space_id）", () => {
     })
   })
 
-  it("整数 id 透传：请求体仍发十进制字符串，服务端两种都收", async () => {
+  it("整数 id 透传：服务端回的数字 parentId 解析后原样发回去，仍是十进制字符串", async () => {
+    // 先按服务端口径收一份父级（id 与 parentId 都是 JSON 数字）
+    const parentsCalls = stubFetch(() =>
+      jsonResponse([
+        { id: 12, title: "团队知识库", parentId: null },
+        { id: 13, title: "后端", parentId: 12 }
+      ])
+    )
+    const parents = await new ImportApi(CIKI, "t").parents("1")
+    expect(parentsCalls[0].url).toBe(`${CIKI}/api/import/parents?space_id=1`)
+    expect(parents.map((item) => [item.id, item.parentId])).toEqual([
+      ["12", null],
+      ["13", "12"]
+    ])
+
+    // 把从接口收到的数字 parentId 发回去：body 里是 "12" 而不是数字
     const calls = stubFetch(() => jsonResponse({ exists: false }))
-    await new ImportApi(CIKI, "t").check("标题", "12", "1")
+    const parentId = parents.at(1)?.parentId ?? null
+    expect(parentId).toBe("12")
+    await new ImportApi(CIKI, "t").check("标题", parentId, "1")
     expect(bodyOf(calls[0])).toEqual({
       title: "标题",
       parentId: "12",
