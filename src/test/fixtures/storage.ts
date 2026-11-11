@@ -1,7 +1,7 @@
 /**
  * storage 正文夹具 —— 除 REAL_COLOR_STORAGE 外全部是虚构示例，不含任何真实文档或真实域名。
- * 覆盖：代码宏（CDATA 含 < > &）、面板宏、表格合并与 colgroup、任务列表、
- * 嵌套列表、附件图 / 外链图 / drawio、导航宏、status 行内宏、expand 宏、页面链接。
+ * 覆盖：代码宏（CDATA 含 < > &）、面板宏、表格合并与 colgroup（含单列表格窄列宽）、
+ * 任务列表、嵌套列表、附件图 / 外链图 / drawio、导航宏、status 行内宏、expand 宏、页面链接。
  *
  * REAL_COLOR_STORAGE 是用户 2026-11-09 提供的 Confluence 页面 body.storage 原文：
  * 标签、属性与 style 值逐字保留，可见正文换成中性占位（不带真实文档内容）。
@@ -106,6 +106,29 @@ export const IMAGE_STORAGE = `
 
 /** 一个开关都没有的极简页。 */
 export const PLAIN_STORAGE = `<p>只有一段话。</p>`
+
+/**
+ * 单列表格夹具（按用户 2026-11-11 实拍样本的形态复刻）：1 行 1 列表格套代码宏，
+ * Confluence 把列宽写成 76px（样本里整格被压成的窄条宽度），正文为中性示例。
+ * 期望：单列表格一律全宽 —— 不写单元格 colwidth；代码块与语言照旧保留。
+ */
+export const SINGLE_COLUMN_TABLE_STORAGE = `
+<table>
+  <colgroup><col style="width: 76.0px;" /></colgroup>
+  <tbody>
+    <tr>
+      <td>
+        <ac:structured-macro ac:name="code">
+          <ac:parameter ac:name="language">text</ac:parameter>
+          <ac:plain-text-body><![CDATA[区域一：执行程序内存 5 GB
+区域二：堆外内存 1 GB
+区域三：栈与元空间 256 MB]]></ac:plain-text-body>
+        </ac:structured-macro>
+      </td>
+    </tr>
+  </tbody>
+</table>
+`
 
 /**
  * 颜色夹具（storage format 形态）：Confluence 把三种颜色都写成内联样式，
