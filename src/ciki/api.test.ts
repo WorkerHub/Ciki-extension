@@ -69,13 +69,28 @@ describe("ciki 页面地址补全", () => {
 })
 
 describe("导入接口的空间参数（契约：space_id）", () => {
-  it("spaces() 解析 id/name，丢掉空 id 的坏条目，name 缺失时用 id 兜底", async () => {
+  it("整数 id（ciki 升级后）读成十进制字符串，一条都不丢", async () => {
+    stubFetch(() =>
+      jsonResponse([
+        { id: 1, slug: "default", name: "默认空间" },
+        { id: 2, slug: "dev", name: "研发空间" },
+        { id: 3, slug: "bare" }
+      ])
+    )
+    const spaces = await new ImportApi(CIKI, "t").spaces()
+    expect(spaces).toEqual([
+      { id: "1", name: "默认空间" },
+      { id: "2", name: "研发空间" },
+      { id: "3", name: "3" }
+    ])
+  })
+
+  it("字符串 id（老版本 ciki）仍然照旧，name 缺失时用 id 兜底", async () => {
     stubFetch(() =>
       jsonResponse([
         { id: "space-default", name: "默认空间" },
         { id: "space-dev", name: "研发空间" },
-        { id: "space-bare" },
-        { name: "没有 id" }
+        { id: "space-bare" }
       ])
     )
     const spaces = await new ImportApi(CIKI, "t").spaces()
@@ -83,6 +98,39 @@ describe("导入接口的空间参数（契约：space_id）", () => {
       { id: "space-default", name: "默认空间" },
       { id: "space-dev", name: "研发空间" },
       { id: "space-bare", name: "space-bare" }
+    ])
+  })
+
+  it("有条目的 id 读不出来时报结构不符，不静默丢成空列表", async () => {
+    stubFetch(() =>
+      jsonResponse([{ id: 1, name: "默认空间" }, { name: "没有 id" }])
+    )
+    await expect(new ImportApi(CIKI, "t").spaces()).rejects.toMatchObject({
+      code: "BAD_RESPONSE",
+      message: "/api/import/spaces 里有条目的 id 读不出来"
+    })
+  })
+
+  it("0 / 负数 / 对象形式的 id 也不算数", async () => {
+    for (const id of [0, -3, { value: 1 }, ""]) {
+      stubFetch(() => jsonResponse([{ id, name: "坏条目" }]))
+      await expect(new ImportApi(CIKI, "t").spaces()).rejects.toMatchObject({
+        code: "BAD_RESPONSE"
+      })
+    }
+  })
+
+  it("parents() 把整数 id 与整数 parentId 都读成字符串，根页仍是 null", async () => {
+    stubFetch(() =>
+      jsonResponse([
+        { id: 12, title: "团队知识库", parentId: null },
+        { id: 13, title: "后端", parentId: 12 }
+      ])
+    )
+    const parents = await new ImportApi(CIKI, "t").parents("1")
+    expect(parents).toEqual([
+      { id: "12", title: "团队知识库", parentId: null },
+      { id: "13", title: "后端", parentId: "12" }
     ])
   })
 
@@ -120,6 +168,49 @@ describe("导入接口的空间参数（契约：space_id）", () => {
       parentId: "p-root",
       conflict: "create_copy"
     })
+  })
+
+  it("整数 id 透传：请求体仍发十进制字符串，服务端两种都收", async () => {
+    const calls = stubFetch(() => jsonResponse({ exists: false }))
+    await new ImportApi(CIKI, "t").check("标题", "12", "1")
+    expect(bodyOf(calls[0])).toEqual({
+      title: "标题",
+      parentId: "12",
+      space_id: "1"
+    })
+  })
+
+  it("check() 把整数 pageId 读成字符串，否则同名页识别失效", async () => {
+    stubFetch(() => jsonResponse({ exists: true, pageId: 42 }))
+    await expect(
+      new ImportApi(CIKI, "t").check("标题", null, "1")
+    ).resolves.toEqual({ exists: true, pageId: "42" })
+  })
+
+  it("createPage() 把整数 pageId/url 读成字符串（服务端已写入，不能报错再去重试）", async () => {
+    stubFetch(() => jsonResponse({ pageId: 7, url: "/p/7" }, 201))
+    await expect(
+      new ImportApi(CIKI, "t").createPage({
+        title: "标题",
+        spaceId: "1",
+        parentId: null,
+        contentJson: "{}",
+        conflict: "create_copy"
+      })
+    ).resolves.toEqual({ pageId: "7", url: "/p/7" })
+  })
+
+  it("createPage() 真没回 pageId 时才算结构不符", async () => {
+    stubFetch(() => jsonResponse({ url: "/p/7" }, 201))
+    await expect(
+      new ImportApi(CIKI, "t").createPage({
+        title: "标题",
+        spaceId: "1",
+        parentId: null,
+        contentJson: "{}",
+        conflict: "create_copy"
+      })
+    ).rejects.toMatchObject({ code: "BAD_RESPONSE" })
   })
 
   it("403 SPACE_FORBIDDEN 走空间错误码与可操作文案", async () => {

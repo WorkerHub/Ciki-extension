@@ -234,8 +234,8 @@ describe("整页搬运动编（夹具 HTTP，不 mock 接口）", () => {
     const prepared = await prepareImport(job)
     expect(prepared.confirm.sourceTitle).toBe("支付服务部署手册")
     expect(prepared.confirm.parents.map((item) => item.id)).toEqual([
-      "p-root",
-      "p-backend"
+      "101",
+      "102"
     ])
     expect(prepared.confirm.conflict.exists).toBe(false)
     expect(prepared.context.prepared.refs).toHaveLength(3)
@@ -254,14 +254,14 @@ describe("整页搬运动编（夹具 HTTP，不 mock 接口）", () => {
       prepared.context,
       {
         title: prepared.confirm.sourceTitle,
-        spaceId: "space-default",
-        parentId: "p-root",
+        spaceId: "1",
+        parentId: "101",
         conflict: "create_copy"
       },
       () => undefined
     )
 
-    expect(result.pageId).toMatch(/[0-9a-f-]{36}/)
+    expect(result.pageId).toMatch(/^\d+$/)
     // 接口回的是根相对路径 /p/<id>：报告与「在 ciki 打开」都要补成绝对地址
     expect(result.url).toBe(`${CIKI}/p/${result.pageId}`)
     expect(result.report.pageUrl).toBe(`${CIKI}/p/${result.pageId}`)
@@ -306,8 +306,8 @@ describe("整页搬运动编（夹具 HTTP，不 mock 接口）", () => {
       again.context,
       {
         title: again.confirm.sourceTitle,
-        spaceId: "space-default",
-        parentId: "p-root",
+        spaceId: "1",
+        parentId: "101",
         conflict: "update"
       },
       () => undefined
@@ -326,8 +326,8 @@ describe("整页搬运动编（夹具 HTTP，不 mock 接口）", () => {
       prepared.context,
       {
         title: prepared.confirm.sourceTitle,
-        spaceId: "space-default",
-        parentId: "p-root",
+        spaceId: "1",
+        parentId: "101",
         conflict: "create_copy"
       },
       () => undefined
@@ -365,7 +365,7 @@ describe("整页搬运动编（夹具 HTTP，不 mock 接口）", () => {
       prepared.context,
       {
         title: "第二页（图缺）",
-        spaceId: "space-default",
+        spaceId: "1",
         parentId: null,
         conflict: "create_copy"
       },
@@ -436,62 +436,56 @@ describe("图片缓存键", () => {
 describe("空间落点（夹具 HTTP，不 mock 接口）", () => {
   it("预选上次用过的空间，父级来自该空间", async () => {
     await saveSettings({
-      defaultSpaceId: "space-dev",
+      defaultSpaceId: "2",
       defaultSpaceName: "研发空间",
       defaultParentId: null,
       defaultParentTitle: ""
     })
     const prepared = await prepareImport(job)
-    expect(prepared.confirm.spaces.map((space) => space.id)).toEqual([
-      "space-default",
-      "space-dev"
-    ])
-    expect(prepared.confirm.defaultSpaceId).toBe("space-dev")
-    expect(prepared.confirm.parents.map((item) => item.id)).toEqual(["p-dev"])
+    expect(prepared.confirm.spaces.map((space) => space.id)).toEqual(["1", "2"])
+    expect(prepared.confirm.defaultSpaceId).toBe("2")
+    expect(prepared.confirm.parents.map((item) => item.id)).toEqual(["103"])
   }, 30_000)
 
   it("没记住或记住的空间不在了，回退到列表第一项（默认空间）", async () => {
     await saveSettings({ defaultSpaceId: "", defaultSpaceName: "" })
     const fresh = await prepareImport(job)
-    expect(fresh.confirm.defaultSpaceId).toBe("space-default")
-    expect(fresh.confirm.parents.map((item) => item.id)).toEqual([
-      "p-root",
-      "p-backend"
-    ])
+    expect(fresh.confirm.defaultSpaceId).toBe("1")
+    expect(fresh.confirm.parents.map((item) => item.id)).toEqual(["101", "102"])
 
-    await saveSettings({ defaultSpaceId: "space-gone" })
+    await saveSettings({ defaultSpaceId: "999" })
     const fallback = await prepareImport(job)
-    expect(fallback.confirm.defaultSpaceId).toBe("space-default")
+    expect(fallback.confirm.defaultSpaceId).toBe("1")
   }, 30_000)
 
   it("切空间重拉父级树，记住的父级不属于新空间时落顶层", async () => {
     await saveSettings({
       defaultSpaceId: "",
-      defaultParentId: "p-root",
+      defaultParentId: "101",
       defaultParentTitle: "团队知识库"
     })
     const prepared = await prepareImport(job)
-    expect(prepared.confirm.defaultParentId).toBe("p-root")
+    expect(prepared.confirm.defaultParentId).toBe("101")
 
-    const switched = await selectSpace(prepared.context, "space-dev")
-    expect(switched.parents.map((item) => item.id)).toEqual(["p-dev"])
+    const switched = await selectSpace(prepared.context, "2")
+    expect(switched.parents.map((item) => item.id)).toEqual(["103"])
     expect(switched.parentId).toBeNull()
-    expect(prepared.context.parents.map((item) => item.id)).toEqual(["p-dev"])
+    expect(prepared.context.parents.map((item) => item.id)).toEqual(["103"])
   }, 30_000)
 
   it("写到选定的空间，并把空间记进设置与完成报告", async () => {
     await saveSettings({ defaultSpaceId: "", defaultSpaceName: "" })
     const prepared = await prepareImport(job)
-    expect(prepared.confirm.defaultSpaceId).toBe("space-default")
-    const switched = await selectSpace(prepared.context, "space-dev")
+    expect(prepared.confirm.defaultSpaceId).toBe("1")
+    const switched = await selectSpace(prepared.context, "2")
     // 换空间后重查同名页也得限定在新空间里
-    await checkConflict(prepared.context, "space-dev", "研发空间里的页", null)
+    await checkConflict(prepared.context, "2", "研发空间里的页", null)
 
     const result = await executeImport(
       prepared.context,
       {
         title: "研发空间里的页",
-        spaceId: "space-dev",
+        spaceId: "2",
         parentId: switched.parentId,
         conflict: "create_copy"
       },
@@ -505,44 +499,44 @@ describe("空间落点（夹具 HTTP，不 mock 接口）", () => {
       title: string
     }[]
     const pageCall = calls.filter((call) => call.path === "pages").at(-1)
-    expect(pageCall).toMatchObject({ spaceId: "space-dev" })
+    expect(pageCall).toMatchObject({ spaceId: "2" })
     const checkCall = calls.filter((call) => call.path === "check").at(-1)
-    expect(checkCall).toMatchObject({ spaceId: "space-dev" })
+    expect(checkCall).toMatchObject({ spaceId: "2" })
 
     const settings = await loadSettings()
-    expect(settings.defaultSpaceId).toBe("space-dev")
+    expect(settings.defaultSpaceId).toBe("2")
     expect(settings.defaultSpaceName).toBe("研发空间")
   }, 60_000)
 
   it("选无权空间被服务端拒绕，归到 SPACE_FORBIDDEN", async () => {
     await saveSettings({ defaultSpaceId: "", defaultSpaceName: "" })
     const prepared = await prepareImport(job)
-    await expect(
-      selectSpace(prepared.context, "space-not-allowed")
-    ).rejects.toMatchObject({ code: "SPACE_FORBIDDEN" })
+    await expect(selectSpace(prepared.context, "999")).rejects.toMatchObject({
+      code: "SPACE_FORBIDDEN"
+    })
     // 构造请求（绕过下拉）同样被拒
     await expect(
-      new ImportApi(CIKI, TOKEN).check("构造的页", null, "space-not-allowed")
+      new ImportApi(CIKI, TOKEN).check("构造的页", null, "999")
     ).rejects.toMatchObject({ code: "SPACE_FORBIDDEN", status: 403 })
   }, 30_000)
 })
 
 describe("预选空间的选择规则", () => {
   const spaces = [
-    { id: "space-default", name: "默认空间" },
-    { id: "space-dev", name: "研发空间" }
+    { id: "1", name: "默认空间" },
+    { id: "2", name: "研发空间" }
   ]
 
   it("记住的空间还在列表里就用它", () => {
-    expect(chooseSpaceId("space-dev", spaces)).toBe("space-dev")
+    expect(chooseSpaceId("2", spaces)).toBe("2")
   })
 
   it("没记住、或记住的已不在列表里，用第一项", () => {
-    expect(chooseSpaceId("", spaces)).toBe("space-default")
-    expect(chooseSpaceId("space-gone", spaces)).toBe("space-default")
+    expect(chooseSpaceId("", spaces)).toBe("1")
+    expect(chooseSpaceId("999", spaces)).toBe("1")
   })
 
   it("空列表回空串，不造无效空间 id", () => {
-    expect(chooseSpaceId("space-default", [])).toBe("")
+    expect(chooseSpaceId("1", [])).toBe("")
   })
 })

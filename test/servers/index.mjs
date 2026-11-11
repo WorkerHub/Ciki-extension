@@ -4,9 +4,10 @@
  * 三个服务：
  * - :8811 假 Confluence：内容页（带 meta ajs-page-id）、REST 正文、附件清单、附件原图；
  * - :8812 假 ciki：五个导入接口（Bearer 令牌）、图床回读、补抓桥的测试页。
- *   `/api/import/spaces` 固定回两项：默认空间在前的 `space-default` 与 `space-dev`，
- *   其它空间 id 一律 403 SPACE_FORBIDDEN；`/__imports` 把收到的导入调用攒着给测试核对落点，
- *   `/__page-content` 给最后一次写入页的 contentJson（核对正文里图片的落点）。
+ *   `/api/import/spaces` 固定回两项：默认空间在前的 `1` 与 `2`（**整数 id**，与 ciki
+ *   升级后的真实契约一致），其它空间 id 一律 403 SPACE_FORBIDDEN；`/__imports` 把
+ *   收到的导入调用攒着给测试核对落点，`/__page-content` 给最后一次写入页的 contentJson
+ *   （核对正文里图片的落点）。
  * - :8813 假图床（与源站跨源）：正文里的站外图从这里取，验「按原地址下载 → 转存」，
  *   以及防盗链 403、回登录页、慢响应这几类单张失败。
  *
@@ -262,18 +263,21 @@ const pages = new Map()
 const files = new Map()
 
 // 空间替身：默认空间在前（真实接口也这么排序），第二项用来验「换空间后父级跟着换」。
+// id 是整数（ciki 升级后的真实契约）：插件把数字当不透明值透传成十进制字符串。
 const SPACES = [
-  { id: "space-default", name: "默认空间" },
-  { id: "space-dev", name: "研发空间" }
+  { id: 1, slug: "default", name: "默认空间" },
+  { id: 2, slug: "dev", name: "研发空间" }
 ]
-const DEFAULT_SPACE_ID = "space-default"
+const DEFAULT_SPACE_ID = 1
 const PARENTS_BY_SPACE = {
-  "space-default": [
-    { id: "p-root", title: "团队知识库", parentId: null },
-    { id: "p-backend", title: "后端", parentId: "p-root" }
+  1: [
+    { id: 101, title: "团队知识库", parentId: null },
+    { id: 102, title: "后端", parentId: 101 }
   ],
-  "space-dev": [{ id: "p-dev", title: "研发文档", parentId: null }]
+  2: [{ id: 103, title: "研发文档", parentId: null }]
 }
+/** 页面 id 也照真实契约自增（整数），不再用 UUID。 */
+let nextPageId = 1001
 /** 本次进程里收到的导入调用（供测试核对落点，不透出 contentJson）。 */
 const imports = []
 /** 最后一次写入页的标题与 contentJson（供测试核对图片落点）。 */
@@ -281,9 +285,15 @@ let lastPage = null
 
 /** 缺省与空串都落默认空间（与后端契约一致）；不认识的空间一律拒绝。 */
 function resolveSpace(value) {
-  const id = typeof value === "string" && value.trim() ? value.trim() : ""
-  const candidate = id || DEFAULT_SPACE_ID
-  return SPACES.some((space) => space.id === candidate) ? candidate : null
+  const raw =
+    typeof value === "number"
+      ? String(value)
+      : typeof value === "string"
+        ? value.trim()
+        : ""
+  const candidate = raw || String(DEFAULT_SPACE_ID)
+  const hit = SPACES.find((space) => String(space.id) === candidate)
+  return hit ? String(hit.id) : null
 }
 
 function recordImport(path, spaceId, title) {
@@ -412,7 +422,7 @@ const ciki = createServer(async (req, res) => {
     const key = `${spaceId}::${body.parentId ?? "root"}::${body.title}`
     const existing = pages.get(key)
     const id =
-      existing && body.conflict === "update" ? existing.id : randomUUID()
+      existing && body.conflict === "update" ? existing.id : nextPageId++
     pages.set(key, { id, body })
     lastPage = {
       pageId: id,
