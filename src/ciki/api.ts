@@ -9,6 +9,10 @@
  * - POST /api/import/files            （multipart，字段名 file）→ { url }
  * - POST /api/import/pages            ← { title, parentId, space_id, contentJson, conflict } → { pageId, url }
  * 鉴权是导入令牌：Authorization: Bearer <token>，不接受会话 Cookie（职责分离）。
+ *
+ * id 自 Ciki 升级后是整数（`id`/`pageId`/`parentId` 都是 JSON 数字），插件内部仍按
+ * 不透明字符串透传：解析边界用 asId 把数字转成十进制字符串，发请求时照旧发字符串
+ * （服务端 readIdInput 两种都收）。
  */
 import { ImportError, type ImportErrorCode } from "@/shared/errors"
 
@@ -54,6 +58,33 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value : ""
+}
+
+/**
+ * 接口里的 id：数字（安全正整数）读成十进制字符串，字符串 trim 后非空原样给出，
+ * 其余形态（0、负数、对象、空串）给 null，由调用方决定是报错还是当没有。
+ */
+function asId(value: unknown): string | null {
+  if (typeof value === "number") {
+    return Number.isSafeInteger(value) && value > 0 ? String(value) : null
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    return trimmed === "" ? null : trimmed
+  }
+  return null
+}
+
+/**
+ * 列表接口少给 id 说明 ciki 契约变了：明确报结构不符，别静默丢条目——
+ * 丢掉的后果是空列表（误报「没有可写入的空间」）或空 id 被服务端当默认空间。
+ */
+function requireId(value: unknown, path: string): string {
+  const id = asId(value)
+  if (!id) {
+    throw new ImportError("BAD_RESPONSE", `${path} 里有条目的 id 读不出来`)
+  }
+  return id
 }
 
 /** ciki 导入接口用 code 表达的业务错误，在这里翻成人话。 */
@@ -167,13 +198,11 @@ export class ImportApi {
     if (!Array.isArray(body)) {
       throw new ImportError("BAD_RESPONSE", "/api/import/spaces 返回的不是数组")
     }
-    return body
-      .map((item) => {
-        const record = asRecord(item)
-        const id = asString(record.id)
-        return { id, name: asString(record.name) || id }
-      })
-      .filter((space) => space.id !== "")
+    return body.map((item) => {
+      const record = asRecord(item)
+      const id = requireId(record.id, "/api/import/spaces")
+      return { id, name: asString(record.name) || id }
+    })
   }
 
   async parents(spaceId = ""): Promise<ImportParent[]> {
@@ -188,9 +217,9 @@ export class ImportApi {
     return body.map((item) => {
       const record = asRecord(item)
       return {
-        id: asString(record.id),
+        id: requireId(record.id, "/api/import/parents"),
         title: asString(record.title),
-        parentId: asString(record.parentId) || null
+        parentId: asId(record.parentId)
       }
     })
   }
@@ -209,7 +238,7 @@ export class ImportApi {
     )
     return {
       exists: Boolean(body.exists),
-      pageId: asString(body.pageId) || undefined
+      pageId: asId(body.pageId) ?? undefined
     }
   }
 
@@ -241,7 +270,7 @@ export class ImportApi {
         })
       })
     )
-    const pageId = asString(body.pageId)
+    const pageId = asId(body.pageId)
     if (!pageId) {
       throw new ImportError("BAD_RESPONSE", "/api/import/pages 没有返回 pageId")
     }

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Ciki助手",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "在源文档页一键剪藏到 Ciki：借浏览器登录态读取正文与附件原图，经你确认后写入。",
   "action": {
     "default_popup": "popup.html",
