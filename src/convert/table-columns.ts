@@ -1,4 +1,6 @@
-// 移植自 Ciki 仓 web/src/lib/table-columns.ts（colgroup → TipTap colwidth），内容不变。
+// 移植自 Ciki 仓 web/src/lib/table-columns.ts（colgroup → TipTap colwidth）。
+// 与主仓的唯一差别是「单列表格一律全宽、不写 colwidth」这一条（用户规格 v1.0 的
+// 单列表格修复，主仓落地后按同一规则核对）；其余与主仓逐字一致，主仓改了这里跟着改。
 /**
  * 表格列宽：把 <colgroup> 的列宽换算成 TipTap 单元格的 colwidth。
  *
@@ -76,6 +78,10 @@ function readColgroupWidths(
 /**
  * 给首个表格行的单元格写 `colwidth="w1,w2,…"`（按 colspan 分摊），
  * 其余内容原样返回。没有可用 colgroup 的表格不动。
+ *
+ * 单列表格（列数=1）一律全宽：源端带入的窄列宽不落成单元格 colwidth，
+ * 也不从 colgroup 带过去，否则 ciki 阅读页会把整格锁成一条窄带
+ * （格内代码逐字折行）。多列表格的口径不变。
  */
 export function applyColWidthsFromColgroup(
   html: string,
@@ -103,6 +109,18 @@ export function applyColWidthsFromColgroup(
       0
     )
     if (columnCount <= 0) return
+    // 单列表格一律全宽（与 Ciki 主仓同口径）：不写 colwidth，colgroup 的窄列宽
+    // 也一并去掉 —— TipTap 解析 td/th 时缺 colwidth 会回落到同一列的 <col width>
+    // （extension-table 的 parseColwidth），只跳过写入挡不住窄列宽。
+    if (columnCount === 1) {
+      Array.from(table.children).forEach((child) => {
+        if (child.tagName === "COLGROUP") child.remove()
+      })
+      cells.forEach((cell) => {
+        cell.removeAttribute("colwidth")
+      })
+      return
+    }
     const widths = readColgroupWidths(table, columnCount, baseWidth)
     if (!widths) return
     let cursor = 0

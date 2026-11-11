@@ -6,7 +6,8 @@ import {
   IMAGE_STORAGE,
   PLAIN_STORAGE,
   REAL_COLOR_STORAGE,
-  SAMPLE_STORAGE
+  SAMPLE_STORAGE,
+  SINGLE_COLUMN_TABLE_STORAGE
 } from "@/test/fixtures/storage"
 import { cleanConfluenceHtml } from "./cleaner"
 import { htmlToTiptapDoc } from "./schema"
@@ -144,6 +145,27 @@ describe("表格", () => {
     expect(nodesOfType(table, "tableRow")).toHaveLength(5)
     expect(nodesOfType(table, "tableHeader")).toHaveLength(4)
     expect(cleaned).not.toMatch(/confluence(Th|Td|Table)/)
+  })
+})
+
+describe("单列表格：一律全宽，不写 colwidth", () => {
+  const { doc, cleaned } = convert(SINGLE_COLUMN_TABLE_STORAGE)
+  const [table] = nodesOfType(doc, "table")
+  const [cell] = nodesOfType(table, "tableCell")
+
+  it("源端 76px 窄列宽不落成单元格 colwidth", () => {
+    expect(cell.attrs?.colwidth ?? null).toBeNull()
+  })
+
+  it("清洗结果里没有列宽载具（colwidth / colgroup）", () => {
+    expect(cleaned).not.toContain("colwidth")
+    expect(cleaned).not.toContain("colgroup")
+  })
+
+  it("格内代码块与语言照旧保留", () => {
+    const [block] = nodesOfType(table, "codeBlock")
+    expect(block.attrs?.language).toBe("text")
+    expect(textOfNode(block)).toContain("区域一：执行程序内存 5 GB")
   })
 })
 
