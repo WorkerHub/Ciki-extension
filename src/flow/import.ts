@@ -133,20 +133,73 @@ function ensureConfigured(settings: Settings): void {
   }
 }
 
-/** 父级树摘要拍平成下拉项（缩进用 depth）。 */
+/**
+ * 父级树摘要拍平成下拉项：按树做 DFS，父页排在其所有子页之前。
+ *
+ * 服务端给的是全空间 sort_order 的扁平序，不同父级的子页会交错，直接按
+ * 输入序渲染与网页端页面树对不上；这里只在插件侧重排，不动接口契约。
+ * 同一父级的兄弟沿用输入里的相对次序（服务端已按 sort_order, created_at
+ * 排好），不再二次排序。
+ */
 export function flattenParents(list: ImportParent[]): ParentOption[] {
-  const byId = new Map(list.map((item) => [item.id, item]))
-  return list.map((item) => {
-    let depth = 0
-    let cursor = item.parentId
-    const seen = new Set<string>()
-    while (cursor && byId.has(cursor) && !seen.has(cursor) && depth < 100) {
-      seen.add(cursor)
-      depth += 1
-      cursor = byId.get(cursor)?.parentId ?? null
-    }
-    return { id: item.id, title: item.title, parentId: item.parentId, depth }
+  // id 只用来找父级落点：重复 id 按首次出现的那行认
+  const indexById = new Map<string, number>()
+  list.forEach((item, index) => {
+    if (!indexById.has(item.id)) indexById.set(item.id, index)
   })
+
+  const childrenByParent = new Map<string, number[]>()
+  const roots: number[] = []
+  list.forEach((item, index) => {
+    const parentId = item.parentId
+    const parentIndex = parentId === null ? undefined : indexById.get(parentId)
+    // 父级为 null、不在本空间列表里（孤儿）或指向自己：都按根级处理
+    if (
+      parentId === null ||
+      parentIndex === undefined ||
+      parentIndex === index
+    ) {
+      roots.push(index)
+      return
+    }
+    const siblings = childrenByParent.get(parentId)
+    if (siblings) siblings.push(index)
+    else childrenByParent.set(parentId, [index])
+  })
+
+  const options: ParentOption[] = []
+  // 按行下标记账，重复 id 的异常数据也能每行恰好输出一次
+  const visited = new Set<number>()
+  const visit = (index: number, depth: number): void => {
+    if (visited.has(index)) return
+    visited.add(index)
+    const item = list[index]
+    options.push({
+      id: item.id,
+      title: item.title,
+      parentId: item.parentId,
+      depth
+    })
+    for (const child of childrenByParent.get(item.id) ?? []) {
+      visit(child, depth + 1)
+    }
+  }
+
+  for (const index of roots) visit(index, 0)
+
+  // 成环等异常数据从根上走不到：按输入顺序补在末尾（根级），保证不丢行
+  list.forEach((item, index) => {
+    if (visited.has(index)) return
+    visited.add(index)
+    options.push({
+      id: item.id,
+      title: item.title,
+      parentId: item.parentId,
+      depth: 0
+    })
+  })
+
+  return options
 }
 
 /** 逐个候选基址试正文；把第一个成功的记住，下次直接用。 */
