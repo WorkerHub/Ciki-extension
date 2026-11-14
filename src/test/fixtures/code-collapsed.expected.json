@@ -1,0 +1,57 @@
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "codeBlock",
+      "attrs": {
+        "language": "java",
+        "collapsed": true
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "public class Folded {\n    // 作者把这条设为折叠：a < b && b > 0\n    public static void main(String[] args) {\n        System.out.println(\"author collapsed\");\n    }\n}"
+        }
+      ]
+    },
+    {
+      "type": "codeBlock",
+      "attrs": {
+        "language": "sql",
+        "collapsed": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "INSERT INTO settlement_step (no, note) VALUES (1, '步骤01');\nINSERT INTO settlement_step (no, note) VALUES (2, '步骤02');\nINSERT INTO settlement_step (no, note) VALUES (3, '步骤03');\nINSERT INTO settlement_step (no, note) VALUES (4, '步骤04');\nINSERT INTO settlement_step (no, note) VALUES (5, '步骤05');\nINSERT INTO settlement_step (no, note) VALUES (6, '步骤06');\nINSERT INTO settlement_step (no, note) VALUES (7, '步骤07');\nINSERT INTO settlement_step (no, note) VALUES (8, '步骤08');\nINSERT INTO settlement_step (no, note) VALUES (9, '步骤09');\nINSERT INTO settlement_step (no, note) VALUES (10, '步骤10');\nINSERT INTO settlement_step (no, note) VALUES (11, '步骤11');\nINSERT INTO settlement_step (no, note) VALUES (12, '步骤12');\nINSERT INTO settlement_step (no, note) VALUES (13, '步骤13');\nINSERT INTO settlement_step (no, note) VALUES (14, '步骤14');\nINSERT INTO settlement_step (no, note) VALUES (15, '步骤15');\nINSERT INTO settlement_step (no, note) VALUES (16, '步骤16');\nINSERT INTO settlement_step (no, note) VALUES (17, '步骤17');\nINSERT INTO settlement_step (no, note) VALUES (18, '步骤18');\nINSERT INTO settlement_step (no, note) VALUES (19, '步骤19');\nINSERT INTO settlement_step (no, note) VALUES (20, '步骤20');\nINSERT INTO settlement_step (no, note) VALUES (21, '步骤21');"
+        }
+      ]
+    },
+    {
+      "type": "codeBlock",
+      "attrs": {
+        "language": "bash",
+        "collapsed": false
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "echo \"步骤01\"\necho \"步骤02\"\necho \"步骤03\"\necho \"步骤04\"\necho \"步骤05\"\necho \"步骤06\"\necho \"步骤07\"\necho \"步骤08\"\necho \"步骤09\"\necho \"步骤10\"\necho \"步骤11\"\necho \"步骤12\"\necho \"步骤13\"\necho \"步骤14\"\necho \"步骤15\"\necho \"步骤16\"\necho \"步骤17\"\necho \"步骤18\"\necho \"步骤19\"\necho \"步骤20\"\necho \"步骤21\"\necho \"步骤22\""
+        }
+      ]
+    },
+    {
+      "type": "codeBlock",
+      "attrs": {
+        "language": null,
+        "collapsed": null
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "预格式化文本：未表态，交阅读页自动规则。"
+        }
+      ]
+    }
+  ]
+}
